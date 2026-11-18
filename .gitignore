@@ -1,0 +1,38 @@
+# ---- IDE / 编辑器 ----
+.idea/
+*.iml
+.vscode/
+
+# ---- Python 产物 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 含密钥的配置（appid / secret / 图床 token，切勿提交）----
+*.yaml
+
+# ---- 数据库 ----
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- 日志 ----
+*.log
+*.log.*
+logs/
+
+# ---- 运行时缓存（程序会自动重建，可安全删除）----
+mtr_pathfinder_temp/
+mtr-original-data-*.json
+mtr-route-departure-*.json
+
+# ---- 运行时生成的图片 ----
+timetable_*.png
+diagram_*.png
+temp_*.png
+route_*.png
+
+# ---- 整理备份（确认无误后可手动删除本目录）----
+_trash/
