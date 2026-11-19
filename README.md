@@ -1,4 +1,4 @@
-# LMS-MTRQQBot
+# MTR 寻路 Bot
 
 一个基于 QQ 官方机器人 API 的 Minecraft Transit Railway 寻路 / 出图机器人：
 在群里 @ 机器人发送指令，它会算出两站之间的最优路线、生成时刻表或列车运行图，并把图片发回群里。
@@ -97,7 +97,8 @@ LINK = 'http://localhost:1025'
 ```
 
 启动后会请求该地址的 `/mtr/api/map/stations-and-routes` 和 `/mtr/api/map/departures`。
-**所以本机需要跑着这样一个 MTR 地图服务，否则寻路会失败**（时刻表 / 运行图读的是本地缓存，不依赖它）。
+服务不可用时程序会**自动回退到本地缓存**继续工作（会在日志里记一条，并在控制台提示"改用本地缓存"），
+只有在缓存也不存在时才真正失败。
 
 数据抓到后会缓存在 `botpy/examples/` 下：
 
@@ -162,11 +163,12 @@ python client.py
 python -B tests\run_all.py
 ```
 
-96 项测试，约 3 秒跑完，只用标准库 `unittest`，不需要 pytest。覆盖：
+112 项测试，约 30 秒跑完，只用标准库 `unittest`，不需要 pytest。覆盖：
 
 - 命令解析（含 `/google` 不该被当成 `/go` 的回归测试）、参数剥离、起点终点校验
 - 停站时间 / 到发偏移 / 颜色解析等数据逻辑
 - **真的调用**三个出图脚本，断言退出码、`SUCCESS` 输出和产物是合法 PNG
+- **把 client.py 真正跑起来**（用 botpy/aiohttp 替身）：文本指令、参数透传、`/时刻表` 全链路出图与上传、上传失败分支
 - 日志：落盘编码、轮转、级别、请求 id、目录不可写时的降级
 - 插件：待办增删改查、图床缺 token 的报错、天气格式化容错
 
@@ -190,8 +192,6 @@ MTRPathQQBot-main/
    ├─ mtr_pathfinder_v4.py  寻路核心（当前使用）
    ├─ mtr_timetable.py      时刻表生成（也可单独 CLI 运行）
    ├─ mtr_diagram.py        运行图生成（也可单独 CLI 运行）
-   ├─ mtrpath.py            旧版寻路，保留备用
-   ├─ mtrpath_beta.py       中间版本，保留备用
    ├─ bot_commands.py       命令解析等纯逻辑
    ├─ script_runner.py      跑外部脚本并记录耗时/返回码
    ├─ logging_setup.py      统一日志
@@ -230,7 +230,8 @@ python mtr_diagram.py "7号线" --output C:\tmp\dg.png --max-trains 10
 ## 常见问题
 
 **寻路一直失败 / 提示"站点名称不正确"**
-先看日志。多数是数据源没起（`http://localhost:1025` 访问不通），或站名不在线路数据里。
+先看日志。地图服务不可用时程序会自动用缓存，所以现在更常见的原因是站名不在线路数据里，
+或者本地连缓存都没有（日志里会有"拉取地图数据失败"和"改用本地缓存"两条记录）。
 站名匹配带模糊回退，可能匹配到近似站名，出图后先确认首末站对不对。
 
 **`/时刻表` `/运行图` 提示找不到缓存数据**
@@ -263,8 +264,7 @@ python mtr_diagram.py "7号线" --output C:\tmp\dg.png --max-trains 10
 - 图床删图走 selenium 打开网页，慢且容易失败（上游实现如此，见 `plugins/img_upload.py`）。
 - `plugins/` 下的图床 / 天气 / 运势 / 待办 / 截图目前是**可用的库**，但 `client.py` 没有调用它们，
   要用需要自己接到指令里。
-- 寻路依赖本地 MTR 地图服务；离线时只能用已有缓存（`--no-update`）。
-- 旧版 `mtrpath.py` / `mtrpath_beta.py` 只做兼容性修复，实际使用的是 `mtr_pathfinder_v4.py`。
+- 寻路优先用在线数据，地图服务不可用时自动回退本地缓存；两者都没有才会失败。
 
 ---
 

@@ -33,6 +33,3 @@ timetable_*.png
 diagram_*.png
 temp_*.png
 route_*.png
-
-# ---- 整理备份（确认无误后可手动删除本目录）----
-_trash/

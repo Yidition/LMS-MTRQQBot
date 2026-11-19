@@ -1,77 +1,23 @@
 # 安装：pip install -r requirements.txt
-# 运行环境：Python 3.8 及以上（源码用 from __future__ import annotations 兼容 3.8
-#           的内置泛型注解；不要在 3.7 及更早版本上运行）
-# 注意：opencc 是 mtr_pathfinder_v4 / mtr_timetable / mtr_diagram 的必需依赖，
-#       之前的清单漏了它
-aiohappyeyeballs
-aiohttp
-aiosignal
-annotated-types
-anyio
-apscheduler
-attrs
-beautifulsoup4
-bs4
-# bzip2
-# ca-certificates
-certifi
-cffi
-charset-normalizer
-chromedriver
-colorama
-contourpy
-cycler
-distro
-# expat
-fonttools
-frozenlist
-h11
-httpcore
-httpx
-idna
-jiter
-kiwisolver
-# libffi
-# libmpdec
-matplotlib
-multidict
-numpy
-openai
-opencc
-# openssl
-outcome
-packaging
-pillow
-propcache
-pycparser
-pydantic
-pydantic-core
-pyparsing
-pysocks
-# python
-python-dateutil
-# python_abi
-pyyaml
-qq-botpy
-requests
-selenium
-setuptools
-six
-sniffio
-sortedcontainers
-soupsieve
-# sqlite
-sqlalchemy
-tk
-tqdm
-trio
-trio-websocket
-typing-extensions
-websocket-client
-websockets
-wheel
-wsproto
-xlwt
-# xz
-yarl
-# zlib
+# 运行环境：Python 3.8 及以上
+#
+# 这里只列代码里**直接 import** 的包（9 个）。
+# 原清单是从 conda freeze 导出的 70 多项，其中 numpy / matplotlib / openai /
+# xlwt / tqdm / apscheduler / bs4 等本仓库一行都没用到，已移除；
+# 传递依赖交给 pip 自己解析。
+
+# ---- 机器人框架 ----
+qq-botpy          # 即 botpy，主入口 client.py
+aiohttp           # 与 QQ 开放平台交互
+pyyaml            # 读取 config.yaml
+
+# ---- 寻路与出图 ----
+opencc            # 简繁转换（mtr_pathfinder_v4 / mtr_timetable / mtr_diagram）
+pillow            # 图像渲染
+fonttools         # 读取字形，渲染多语言站名
+requests          # 拉取 MTR 地图数据
+
+# ---- 插件（plugins/ 下的可选功能库）----
+sqlalchemy        # 今日运势（SQLite）
+selenium          # 网页截图 / 图床删图
+chromedriver      # 上面两个功能需要 Chrome 驱动
