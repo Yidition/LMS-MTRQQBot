@@ -17,6 +17,33 @@
 - 全部可用环境变量覆盖（``MTR_LOG_DIR`` / ``MTR_LOG_LEVEL`` / ``MTR_LOG_CONSOLE``
   / ``MTR_LOG_MAX_BYTES`` / ``MTR_LOG_BACKUPS``）；
 - **建不出日志文件时降级为只输出控制台**，绝不让机器人因为日志挂了。
+
+Unified logging configuration.
+
+Before this refactor:
+1. The whole project had a single ``botpy.log``, created by botpy's logger in the
+   **current working directory**; the file never rotated and kept growing over
+   long runs (one file had already grown past 100 KB);
+2. This program's logs and botpy's internal logs were mixed in the same file and
+   carried no request id — the "receive message → run script → upload" chain of a
+   single ``/go`` could not be followed through the log;
+3. The rendering scripts used ``print`` throughout, so diagnostics relied on the
+   client capturing only the leading and trailing few hundred characters of
+   stdout, and the key information was already truncated when a real problem hit;
+4. Log level, directory and size were all hard-coded and could not be tuned per
+   environment.
+
+What this module does:
+- **One file**: ``<examples>/logs/bot.log``, UTF-8, rotated by size;
+- **Console only up to WARNING**: the script's stderr is what the client uses to
+  judge failure, so it must not be polluted by INFO noise;
+- **Request id**: every message handling run opens a context, log lines carry
+  ``[reqid]``, and a whole chain can be traced;
+- Everything can be overridden by environment variables (``MTR_LOG_DIR`` /
+  ``MTR_LOG_LEVEL`` / ``MTR_LOG_CONSOLE`` / ``MTR_LOG_MAX_BYTES`` /
+  ``MTR_LOG_BACKUPS``);
+- **When no log file can be created, degrade to console output only**, never
+  letting the bot die because of logging.
 """
 
 import contextlib
@@ -32,10 +59,12 @@ import uuid
 EXAMPLES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #: 默认日志目录与文件名
+#: Default log directory and file name.
 DEFAULT_LOG_DIR = os.path.join(EXAMPLES_DIR, "logs")
 DEFAULT_LOG_FILE = "bot.log"
 
 #: 本程序所有 logger 的根名字
+#: Root name of every logger in this program.
 ROOT_LOGGER = "mtrqqbot"
 
 ENV_DIR = "MTR_LOG_DIR"
@@ -67,11 +96,12 @@ _LEVELS = {
 }
 
 #: 当前请求 id（协程/线程各自独立，不会被并发请求串台）
+#: Current request id (independent per coroutine/thread, so concurrent requests cannot mix).
 _request_id = contextvars.ContextVar("mtr_request_id", default="-")
 
 
 class _RequestFilter(logging.Filter):
-    """把 contextvar 里的请求 id 注进每条日志记录。"""
+    """把 contextvar 里的请求 id 注进每条日志记录。 / Inject the request id from the contextvar into every log record."""
 
     def filter(self, record):
         record.reqid = _request_id.get()
@@ -79,7 +109,7 @@ class _RequestFilter(logging.Filter):
 
 
 def resolve_level(value, default=DEFAULT_LEVEL):
-    """把 ``"info"`` / ``20`` / ``None`` 这类输入统一成 logging 级别。"""
+    """把 ``"info"`` / ``20`` / ``None`` 这类输入统一成 logging 级别。 / Normalize inputs such as ``"info"`` / ``20`` / ``None`` into a logging level."""
     if value is None or value == "":
         return _LEVELS[default]
     if isinstance(value, int):
@@ -91,7 +121,7 @@ def resolve_level(value, default=DEFAULT_LEVEL):
 
 
 def new_request_id(seed=""):
-    """生成请求 id：给了种子（如 QQ 消息 id）就取尾部，否则随机。"""
+    """生成请求 id：给了种子（如 QQ 消息 id）就取尾部，否则随机。 / Generate a request id from the seed tail (e.g. a QQ message id), else randomly."""
     seed = str(seed or "").strip()
     if seed:
         return seed[-8:]
@@ -104,7 +134,7 @@ def current_request_id():
 
 @contextlib.contextmanager
 def request_context(seed=""):
-    """给一段处理逻辑打上请求 id，退出时恢复上一层。"""
+    """给一段处理逻辑打上请求 id，退出时恢复上一层。 / Tag a block of handling logic with a request id and restore the previous one on exit."""
     token = _request_id.set(new_request_id(seed))
     try:
         yield _request_id.get()
@@ -126,7 +156,7 @@ def _build_formatter():
 
 
 def _build_file_handler(log_dir, log_file, max_bytes, backups, level):
-    """建轮转文件处理器；目录不可写时返回 None（不抛异常）。"""
+    """建轮转文件处理器；目录不可写时返回 None（不抛异常）。 / Build the rotating file handler; return None if the directory is not writable (no exception)."""
     path = os.path.join(log_dir, log_file)
     try:
         os.makedirs(log_dir, exist_ok=True)
@@ -147,6 +177,7 @@ def _build_file_handler(log_dir, log_file, max_bytes, backups, level):
 def _build_console_handler(level, stream=None):
     stream = stream or sys.stderr
     # Windows 控制台默认 GBK，中文日志可能直接抛 UnicodeEncodeError
+    # The Windows console defaults to GBK, so Chinese log text may raise UnicodeEncodeError.
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
@@ -159,9 +190,10 @@ def _build_console_handler(level, stream=None):
 
 
 def _merge_botpy_logger(handlers, level):
-    """把 botpy 自己的日志并到同一个文件里，避免两个 ``*.log`` 各写一半。"""
+    """把 botpy 自己的日志并到同一个文件里，避免两个 ``*.log`` 各写一半。 / Merge botpy's own logs into the same file so two ``*.log`` files do not split the output."""
     target = logging.getLogger("botpy")
     # 先摘掉它自带的 botpy.log 文件处理器（重复 setup 时也不会堆积）
+    # First drop its built-in botpy.log file handler (repeated setup calls do not pile up).
     for handler in list(target.handlers):
         target.removeHandler(handler)
         try:
@@ -180,6 +212,11 @@ def setup(level=None, console_level=None, log_dir=None, log_file=None,
 
     可重复调用：每次都会先清掉旧处理器，不会出现重复行。
     返回配置好的 logger。
+
+    Configure logging for the main program: file (rotated, UTF-8) + console.
+
+    Safe to call repeatedly: old handlers are cleared first, so no duplicate lines appear.
+    Returns the configured logger.
     """
     level = resolve_level(
         level if level is not None else os.environ.get(ENV_LEVEL), DEFAULT_LEVEL
@@ -219,6 +256,13 @@ def setup_console(level=None, stream=None):
     默认 WARNING，这样被 client 以子进程调用时 stderr 保持干净
     （client 靠 stderr 判断脚本是否失败）。想看详细信息先设
     ``MTR_LOG_CONSOLE=INFO`` 或调用时传 ``level='INFO'``。
+
+    For standalone scripts: console output only, no file touched.
+
+    WARNING by default, so stderr stays clean when the client invokes the script
+    as a subprocess (the client relies on stderr to decide whether a script
+    failed). For more detail set ``MTR_LOG_CONSOLE=INFO`` beforehand, or pass
+    ``level='INFO'`` at the call site.
     """
     level = resolve_level(
         level if level is not None else os.environ.get(ENV_CONSOLE), DEFAULT_CONSOLE_LEVEL
@@ -232,7 +276,7 @@ def setup_console(level=None, stream=None):
 
 
 def get_logger(name=None):
-    """取 ``mtrqqbot.*`` 下的 logger；不负责配置处理器。"""
+    """取 ``mtrqqbot.*`` 下的 logger；不负责配置处理器。 / Get a logger under ``mtrqqbot.*``; handler configuration is not its job."""
     if not name:
         return logging.getLogger(ROOT_LOGGER)
     if name.startswith(ROOT_LOGGER + "."):
@@ -241,13 +285,13 @@ def get_logger(name=None):
 
 
 def log_file_path(log_dir=None, log_file=None):
-    """当前（或指定）日志文件路径，测试与排障用。"""
+    """当前（或指定）日志文件路径，测试与排障用。 / Path of the current (or given) log file, for tests and troubleshooting."""
     log_dir = log_dir or os.environ.get(ENV_DIR) or DEFAULT_LOG_DIR
     return os.path.join(log_dir, log_file or DEFAULT_LOG_FILE)
 
 
 def _sender_info(message):
-    """尽量从 botpy 的 GroupMessage 里挖出群号和提问者，取不到就返回 '-'。"""
+    """尽量从 botpy 的 GroupMessage 里挖出群号和提问者，取不到就返回 '-'。 / Best-effort extraction of the group id and asker from botpy's GroupMessage, '-' if unavailable."""
     group = getattr(message, "group_openid", None) or "-"
     author = getattr(message, "author", None)
     user = (
@@ -263,6 +307,12 @@ def traced(handler):
 
     这样一个 /go 指令在日志里就是同一个 ``[reqid]`` 下的完整链路：
     收到消息 → 执行脚本 → 上传图片 → 处理结束（含总耗时）。
+
+    Wrap an ``async def handler(self, message)`` with a request context and timing.
+
+    That way one /go command appears in the log as a single complete chain under
+    the same ``[reqid]``: receive message → run script → upload image → handling
+    finished (including total elapsed time).
     """
 
     @functools.wraps(handler)

@@ -4,6 +4,13 @@
 单独成模块的原因：``client.py`` 一开头就 ``import botpy``，没有 botpy 的环境
 根本没法 import，这段"跑子进程 + 打日志"的逻辑也就无法被测试覆盖。
 抽出来之后它只依赖标准库和 ``bot_commands``，可以真刀真枪地跑一次出图脚本。
+
+Run external rendering/pathfinding scripts and log the whole process.
+
+Why this is a separate module: ``client.py`` starts with ``import botpy``, so environments
+without botpy cannot import it, which left the "run a subprocess and log it" logic
+untestable. Once extracted, it depends only on the standard library and ``bot_commands``,
+so a rendering script can be executed for real.
 """
 
 import asyncio
@@ -27,6 +34,18 @@ async def run_script(script, *args, timeout=cmds.SCRIPT_TIMEOUT):
     脚本的 cwd 固定为 examples 目录；环境里强制 UTF-8 —— 子进程默认按 GBK
     输出中文，原来 client.py 按 UTF-8 解码会抛 UnicodeDecodeError，
     导致所有指令都回"系统执行出错"。
+
+    Run the pathfinding/rendering script in a thread pool and return CompletedProcess;
+    return None on timeout.
+
+    Why not ``asyncio.create_subprocess_exec``: it raises NotImplementedError on the Windows
+    ``SelectorEventLoop``, and we cannot control which event loop botpy uses internally.
+    Running ``subprocess.run`` in a thread pool works with any loop, and unlike the original
+    synchronous call it does not freeze the whole bot.
+
+    The script cwd is fixed to the examples directory, and the environment forces UTF-8:
+    subprocesses emit Chinese in GBK by default, and the old client.py decoded it as UTF-8,
+    which raised UnicodeDecodeError and made every command reply "system execution error".
     """
     cmd = cmds.build_script_command(script, *args)
     _log.info("执行外部脚本 script=%s args=%s", script, args)
@@ -60,6 +79,9 @@ async def run_script(script, *args, timeout=cmds.SCRIPT_TIMEOUT):
     )
     # 成功时也把原始输出留在 DEBUG 里：出图脚本的诊断信息只在这里完整保留，
     # 回给用户的消息会被截断（见 bot_commands.interpret_result）
+    # Keep the raw output in DEBUG even on success: the diagnostic information of rendering
+    # scripts survives only here, since the message sent to users is truncated (see
+    # bot_commands.interpret_result).
     if result.stdout:
         _log.debug("stdout of %s:\n%s", script, result.stdout)
     if result.stderr:

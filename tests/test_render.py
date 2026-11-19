@@ -5,6 +5,15 @@
 因为脚本用的都是相对 cwd 的路径。目录本身就不在 examples 下，
 顺带也验证了 raqm DLL 注册修复——否则 draw_text_v2 会抛
 "not supported without libraqm"。
+
+End-to-end integration tests: really run the three rendering scripts and assert
+that the artifacts are valid PNG files.
+
+These tests run in a temporary "simulated working directory" (containing the
+cache json and mtr_pathfinder_data), because the scripts all use cwd-relative
+paths. The directory itself is outside examples, which incidentally also
+verifies the raqm DLL registration fix; otherwise draw_text_v2 raises
+"not supported without libraqm".
 """
 
 import ast
@@ -98,6 +107,13 @@ class RenderTests(unittest.TestCase):
 
         这里故意不传 --no-update，模拟机器人默认行为（先抓在线数据）。
         修复前这种情况会直接失败，缓存形同虚设。
+
+        When the map service is down, rendering should still work as long as a
+        local cache exists.
+
+        --no-update is deliberately omitted here to mimic the bot's default
+        behavior (fetch online data first). Before the fix this case failed
+        outright, making the cache useless.
         """
         import socket
 
@@ -115,7 +131,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("改用本地缓存", result.stdout)
 
     def test_diagram_reports_degenerate_route_clearly(self):
-        """单站环线这类退化数据要给出准确原因，而不是"没有找到发车时间"。"""
+        """单站环线这类退化数据要给出准确原因，而不是"没有找到发车时间"。 / Degenerate data such as a single-station loop line must be reported with an accurate reason instead of "没有找到发车时间"."""
         out = os.path.join(self.out_dir, "degenerate.png")
         result = run_script(
             "mtr_diagram.py", "YRT轻铁|YRT Light Rail||Y01", "--output", out, cwd=self.work
@@ -131,6 +147,8 @@ class RenderTests(unittest.TestCase):
         )
         self.assertNotIn("SUCCESS", result.stdout)
         # 三个出图脚本的失败退出码要一致（原来 v4 失败也退出 0）
+        # The three rendering scripts must agree on the failure exit code
+        # (v4 used to exit 0 even on failure).
         self.assertEqual(result.returncode, 1)
         self.assertFalse(os.path.isfile(out))
 
@@ -145,7 +163,7 @@ class RenderTests(unittest.TestCase):
 
 
 class ClientSourceTests(unittest.TestCase):
-    """client.py 依赖 botpy 无法在此环境运行，退而校验它的源码约束。"""
+    """client.py 依赖 botpy 无法在此环境运行，退而校验它的源码约束。 / client.py depends on botpy and cannot run in this environment, so its source contract is checked instead."""
 
     @classmethod
     def setUpClass(cls):
@@ -158,6 +176,9 @@ class ClientSourceTests(unittest.TestCase):
     def test_no_hardcoded_py_launcher(self):
         # 原来 cmd = ['py', ...] 会用到 py launcher 的默认解释器（3.15），
         # 和跑机器人的 3.8 不是同一个，缺一堆依赖
+        # The old cmd = ['py', ...] used the py launcher default interpreter
+        # (3.15), which is not the 3.8 running the bot and lacks many
+        # dependencies.
         self.assertNotIn("['py',", self.source)
         with open(os.path.join(EXAMPLES, "script_runner.py"), encoding="utf-8") as handle:
             runner = handle.read()
@@ -169,6 +190,7 @@ class ClientSourceTests(unittest.TestCase):
 
     def test_subprocess_configured_for_utf8(self):
         # 跑子进程的逻辑已抽到 script_runner.py
+        # The subprocess logic has been extracted into script_runner.py.
         with open(os.path.join(EXAMPLES, "script_runner.py"), encoding="utf-8") as handle:
             runner = handle.read()
         self.assertIn("child_env", runner)

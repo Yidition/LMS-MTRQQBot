@@ -2,14 +2,17 @@ import os
 import sqlite3
 
 # 连接到数据库，如果不存在则创建
+# Connect to the database, creating it if it does not exist.
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chat_bot.db')
 conn = sqlite3.connect(DB_PATH)
 # 创建游标
+# Create a cursor.
 c = conn.cursor()
 #
 c.execute("""DROP TABLE IF EXISTS qr_fortune; """)
 c.execute("""DROP TABLE IF EXISTS qr_fortune_log;  """)
 # 创建表
+# Create the tables.
 c.execute("""
 
 CREATE TABLE qr_fortune (
@@ -34,6 +37,7 @@ CREATE TABLE qr_fortune_log (
 
 
 # 插入数据
+# Insert the data.
 c.execute("insert into qr_fortune (id, fortune_summary, lucky_star, sign_text, un_sign_text) values (1, '中吉', '★★★★★☆☆', '排除万难，有贵人助，把握时机，可得成功', '突破万难权威高，刚性固执如英豪，须事谨慎守和平，可得大功奏业成。很勤勉求上进，又很有耐力，在技术界或艺能界，是最可能成功之数也。但此数因少得人和，而略感孤独些。');")
 c.execute("insert into qr_fortune (id, fortune_summary, lucky_star, sign_text, un_sign_text) values (2, '中吉', '★★★★☆☆☆', '安乐自来，自然吉祥，力行不懈，终必成功', '志高力微乏实行，妄谋无计事难成，晚年安宁静逸祥，享得天赋增吉相。');")
 c.execute("insert into qr_fortune (id, fortune_summary, lucky_star, sign_text, un_sign_text) values (3, '中吉', '★★★★★☆☆', '努力发达，贯彻志望，不忘进退，成功可期', '意志坚刚善恶明，富进取心求和平，忍耐克己如心意，前难后成可安然。很勤勉求上进，又很有耐力，在技术界或艺能界，是最可能成功之数也。但此数因少得人和，而略感孤独些。');")
@@ -121,7 +125,9 @@ c.execute("insert into qr_fortune_log (id, fortune_summary, lucky_star, sign_tex
 c.execute("insert into qr_fortune_log (id, fortune_summary, lucky_star, sign_text, un_sign_text, user_id, extract_time) values (17, '凶带吉', '★★★☆☆☆☆', '名虽可得，利则难获，艺界发展，可望成功', '可能有名气，却未能用这名气带来财运，可考虑从事娱乐或艺术来业，把名气转化成事业中一部分。', '8A91A2F3BE5B5AF3FEC97FB5AA6D9B38', '2024-12-18');")
 
 # 提交事务
+# Commit the transaction.
 conn.commit()
 # 关闭游标和连接
+# Close the cursor and the connection.
 c.close()
 conn.close()

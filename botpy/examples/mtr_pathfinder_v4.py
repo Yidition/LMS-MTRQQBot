@@ -38,8 +38,11 @@ MAX_INT = 2 ** 64 - 1
 _log = logging_setup.get_logger("script.mtr_pathfinder_v4")
 
 RUNNING_SPEED: float = 5.612          # 站内换乘速度，单位 block/s
+# In-station transfer speed, in blocks per second.
 TRANSFER_SPEED: float = 4.317         # 出站换乘速度，单位 block/s
+# Out-of-station transfer speed, in blocks per second.
 WILD_WALKING_SPEED: float = 2.25      # 非出站换乘（越野）速度，单位 block/s
+# Wild walking speed (a transfer that is not out-of-station), in blocks per second.
 
 opencc1 = OpenCC('s2t')
 opencc2 = OpenCC('t2jp')
@@ -240,7 +243,9 @@ class ImagePattern(Enum):
     FAKE_STATION = 1
     TEXT = 40.2
     STATION = 40  # 圆圈 + 黑体字 -> 车站
+    # Circle plus bold text -> station.
     THUMB_TEXT = 60  # 路线种类图标 + 灰字 -> 路线名
+    # Route type icon plus grey text -> route name.
     THUMB_INDENT_TEXT = 80
     GREY_TEXT = 40.1
     GREY_INDENT_TEXT = 60.1
@@ -295,6 +300,7 @@ def fetch_data(link: str, LOCAL_FILE_PATH, MAX_WILD_BLOCKS,
     link = link.rstrip('/') + '/mtr/api/map/stations-and-routes?dimension=0'
     response = requests.get(link)
     response.encoding = 'utf-8'  # 强制指定 UTF-8
+    # Force UTF-8.
     data = response.json()['data']
     data_new = {'stations': {}, 'routes': {},
                 'station_coords': {}, 'station_routes': {},
@@ -619,6 +625,7 @@ def gen_timetable(data: dict, IGNORED_LINES: list[str], ONLY_LINES: list[str],
                  for x in AVOID_STATIONS]
 
     # 添加普通路线
+    # Add regular routes.
     tt_dict = {}
     for route_id in dep_data.keys():
         if route_id not in data['routes']:
@@ -626,6 +633,7 @@ def gen_timetable(data: dict, IGNORED_LINES: list[str], ONLY_LINES: list[str],
 
         route = data['routes'][route_id]
         # 禁路线
+        # Ignore the route.
         if check_route_name(route, IGNORED_LINES, ONLY_LINES) is True:
             continue
 
@@ -683,6 +691,7 @@ def gen_timetable(data: dict, IGNORED_LINES: list[str], ONLY_LINES: list[str],
                            [route_id, route['stations'][-1]['id'], platform]))
 
             # 添加出站换乘
+            # Add out-of-station transfers.
             connections = data['stations'][_station2]['connections']
             if _station2 in TRANSFER_ADDITION:
                 connections += data['stations'][TRANSFER_ADDITION[_station2]]
@@ -705,6 +714,7 @@ def gen_timetable(data: dict, IGNORED_LINES: list[str], ONLY_LINES: list[str],
 
             if CALCULATE_WALKING_WILD is True:
                 # 添加非出站换乘（越野）
+                # Add wild walking transfers (not out-of-station).
                 connections = list(data['stations'].keys())
                 if _station2 in WILD_ADDITION:
                     connections += data['stations'][WILD_ADDITION[_station2]]
@@ -785,6 +795,7 @@ def load_tt(tt_dict: dict[str, list[tuple]], data, start, end,
         return []
 
     # 添加起点出站换乘
+    # Add out-of-station transfers from the origin.
     ss = data['stations'][start_station]['station']
     connections = data['stations'][start_station]['connections']
     if start in TRANSFER_ADDITION:
@@ -803,6 +814,7 @@ def load_tt(tt_dict: dict[str, list[tuple]], data, start, end,
 
     if CALCULATE_WALKING_WILD is True:
         # 添加起点非出站换乘（越野）
+        # Add wild walking transfers from the origin.
         connections = list(data['stations'].keys())
         if start in WILD_ADDITION:
             connections += data['stations'][WILD_ADDITION[start]]
@@ -890,11 +902,13 @@ def process_path(result: list[tuple], start: str, end: str,
     route_new = []
     low_i = MAX_INT
     # 合并连续乘坐同一辆车的路段
+    # Merge consecutive legs ridden on the same train.
     for i in range(len(result) - 1, -1, -1):
         new_leg = result[i]
 
         if len(new_leg) < 6:
             # 步行路线
+            # Walking leg.
             route_new.append(new_leg)
             continue
 
@@ -906,6 +920,7 @@ def process_path(result: list[tuple], start: str, end: str,
             old_leg = result[j]
             if len(old_leg) < 6:
                 # 步行路线
+                # Walking leg.
                 break
 
             trip_index = str(old_leg[0])
@@ -1008,6 +1023,7 @@ def save_image(route_type: RouteType, every_route_time: list,
     pattern.append(
         (ImagePattern.TEXT,
          str(strftime('%H:%M:%S', gmtime(departure_time + 8 * 3600)))))  # 出发时间
+    # Departure time.
     time_img = Image.open(PNG_PATH + os.sep + 'time.png')
     for route_data in every_route_time:
         route_img = Image.open(PNG_PATH + os.sep + f'{route_data[7]}.png')
@@ -1022,21 +1038,29 @@ def save_image(route_type: RouteType, every_route_time: list,
 
         pattern.append((ImagePattern.STATION, route_data[0],
                         route_data[2]))  # 车站
+        # Station.
         pattern.append((ImagePattern.TEXT, time1))  # 发车时间
+        # Departure time.
         pattern.append((ImagePattern.THUMB_TEXT, route_img,
                         route_data[3]))  # 路线名
+        # Route name.
         if route_data[7] is not None:
             # 正常
+            # Normal.
             pattern.append((ImagePattern.GREY_TEXT, terminus))  # 方向
+            # Direction.
 
         colour = 'grey'
         pattern.append((ImagePattern.THUMB_TEXT, time_img,
                         time3, colour))  # 用时
+        # Travel time.
         pattern.append((ImagePattern.TEXT, time2))  # 到站时间
+        # Arrival time.
 
     pattern.append((ImagePattern.STATION, route_data[1], route_data[2]))
     # full_time = every_route_time[-1][6] - every_route_time[0][5]
     # 总时长从出发时间开始算，不从发车时间开始算
+    # The total duration counts from the departure time, not from the train departure time.
     full_time = every_route_time[-1][6] - departure_time
     return generate_image(pattern, route_type, BASE_PATH,
                           version1, version2, full_time, show)
@@ -1274,6 +1298,7 @@ def main(station1: str, station2: str, LINK: str,
 
         departure_time = round(t1.timestamp())
         departure_time += 10  # 寻路时间
+        # Pathfinding time.
 
     departure_time %= 86400
 
@@ -1299,6 +1324,10 @@ def main(station1: str, station2: str, LINK: str,
 
     # 数据源不可用（地图服务没开 / 网络断 / 接口结构变了）时，只要本地有缓存就继续用缓存。
     # 不加这个回退的话，/go 会在服务挂掉时整体不可用，哪怕缓存完好。
+    # When the data source is unavailable (the map service is not running, the network is
+    # down, or the API structure changed), keep using the local cache as long as it exists.
+    # Without this fallback, /go would be unusable whenever the service is down, even if
+    # the cache is intact.
     has_cache = os.path.exists(LOCAL_FILE_PATH)
     if UPDATE_DATA is True or not has_cache:
         if LINK == '':
@@ -1374,25 +1403,37 @@ def main(station1: str, station2: str, LINK: str,
 
 def run():
     # 地图设置
+    # Map settings.
     # 在线线路图网址，结尾删除"/"
+    # The URL of the online route map; the trailing "/" is removed.
     LINK: str = 'http://localhost:1025'
     # 旅途的最长时间，默认值为3
+    # The maximum trip duration, in hours. The default is 3.
     MAX_HOUR: int = 3
     # 从A站到B站，非出站换乘（越野）的最远步行距离，默认值为1500
+    # The maximum wild walking distance from station A to station B. The default is 1500.
     MAX_WILD_BLOCKS: int = 1500
     # 手动增加出站换乘
     # "车站: [出站换乘的车站, ...], ..."
+    # Manually add out-of-station transfers.
+    # "station: [out-of-station transfer station, ...], ..."
     TRANSFER_ADDITION: dict[str, list[str]] = {}
     # 手动增加非出站换乘（越野）
     # "车站: [非出站换乘的车站, ...], ..."
+    # Manually add wild walking transfers (not out-of-station).
+    # "station: [wild walking station, ...], ..."
     WILD_ADDITION: dict[str, list[str]] = {}
     # 车站名称映射
     # "车站昵称: 车站实际名称, ..."
+    # Station name mapping.
+    # "station nickname: actual station name, ..."
     STATION_TABLE: dict[str, str] = {}
     # 禁止乘坐的路线（未开通的路线）
+    # Routes that must not be used (routes that are not opened yet).
     ORIGINAL_IGNORED_LINES: list = []
 
     # 文件设置
+    # File settings.
     link_hash = hashlib.md5(LINK.encode('utf-8')).hexdigest()
     LOCAL_FILE_PATH = f'mtr-original-data-{link_hash}-mtr4-v4.json'
     DEP_PATH = f'mtr-route-departure-{link_hash}-mtr4-v4.json'
@@ -1400,29 +1441,41 @@ def run():
     PNG_PATH = 'mtr_pathfinder_data'
 
     # 是否更新车站数据
+    # Whether to update the station data.
     UPDATE_DATA: bool = True
     # 是否更新路线数据
+    # Whether to update the route data.
     GEN_DEPARTURE: bool = True
 
     # 寻路设置
+    # Pathfinding settings.
     # 避开的路线
+    # Routes to avoid.
     IGNORED_LINES: list = []
     # 仅使用指定路线（如启用，将忽略"避开的路线"参数）
+    # Use only the given routes (when enabled, the "routes to avoid" setting is ignored).
     ONLY_LINES: list = []
     # 避开的车站
+    # Stations to avoid.
     AVOID_STATIONS: list = []
     # 允许高铁，默认值为True
+    # Allow high-speed rail. The default is True.
     CALCULATE_HIGH_SPEED: bool = True
     # 允许船，默认值为True
+    # Allow boats. The default is True.
     CALCULATE_BOAT: bool = True
     # 允许非出站换乘（越野），默认值为False
+    # Allow wild walking transfers (not out-of-station). The default is False.
     CALCULATE_WALKING_WILD: bool = False
     # 仅允许轻轨，默认值为False
+    # Allow only light rail. The default is False.
     ONLY_LRT: bool = False
 
     # 出发时间（秒，0-86400），默认值为None，即当前时间后10秒
+    # Departure time in seconds (0-86400). None means 10 seconds after the current time.
     DEP_TIME = None
     # 输出的图片中是否显示详细信息（每站的到站、出发时间）
+    # Whether to show details in the output image (arrival and departure time of each station).
     DETAIL: bool = False
 
     while True:
@@ -1446,14 +1499,17 @@ def run():
              show=True, departure_time=DEP_TIME, tz = 8, need_input=False)
              
         # ====== 新增/修改的保存逻辑 ======
+        # ====== Added/modified save logic ======
         if result and isinstance(result, tuple):
             image = result[0]
             
             # 1. 确保 images 文件夹存在
+            # 1. Make sure the images folder exists.
             image_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
             os.makedirs(image_dir, exist_ok=True)
             
             # 2. 清理 Windows 不允许的非法字符
+            # 2. Remove characters that Windows does not allow in file names.
             safe_station1 = re.sub(r'[\\/*?:"<>|]', "_", station1)
             safe_station2 = re.sub(r'[\\/*?:"<>|]', "_", station2)
             
@@ -1462,10 +1518,12 @@ def run():
             
             try:
                 # 尝试用中文站名保存
+                # Try to save with the Chinese station names.
                 image.save(filepath)
                 print(f"✅ 图片已保存至：{filepath}")
             except OSError:
                 # 如果因为中文路径或文件名报错，自动回退到纯数字时间戳
+                # If a Chinese path or file name fails, fall back to a plain numeric timestamp.
                 from time import time
                 fallback_path = os.path.join(image_dir, f"route_{int(time())}.png")
                 image.save(fallback_path)
@@ -1483,6 +1541,7 @@ def run_with_args():
     parser.add_argument("--output", default="result.png", help="图片保存路径")
     parser.add_argument("--no-update", action="store_true", help="不自动更新数据，使用本地缓存")
     # 新增下面三个参数
+    # The three arguments below are newly added.
     parser.add_argument("--no-highspeed", action="store_true", help="禁用高铁")
     parser.add_argument("--no-lightrail", action="store_true", help="禁用轻轨")
     parser.add_argument("--no-line", action="append", default=[], help="禁用指定线路")
@@ -1506,16 +1565,19 @@ def run_with_args():
     GEN_DEPARTURE = not args.no_update
     
     # 处理参数
+    # Handle the arguments.
     IGNORED_LINES = list(args.no_line)
     CALCULATE_HIGH_SPEED = not args.no_highspeed
     
     # 如果禁用轻轨，自动找出所有轻轨线路并加入忽略列表
+    # If light rail is disabled, find every light rail route and add it to the ignore list.
     if args.no_lightrail:
         try:
             if os.path.exists(LOCAL_FILE_PATH):
                 with open(LOCAL_FILE_PATH, encoding='utf-8') as f:
                     data = json.load(f)
                 # 兼容不同版本数据格式
+                # Tolerate data formats of different versions.
                 routes_dict = data.get('routes', {})
                 for route in routes_dict.values():
                     if route.get('type') == 'train_light_rail':
@@ -1553,6 +1615,9 @@ def run_with_args():
         print(f"寻路过程发生异常: {e}")
         # 只有在 DEBUG 级别才把 traceback 写进 stderr：stderr 非空会被 client 当成
         # 失败原因回给用户，默认级别下保持干净，把详细信息留给日志文件
+        # The traceback goes to stderr only at DEBUG level: a non-empty stderr is taken by
+        # the client as the failure reason returned to the user, so keep it clean at the
+        # default level and leave the details to the log file.
         _log.debug("寻路异常 start=%s end=%s", args.start, args.end, exc_info=True)
         print("FAILED")
         return False
@@ -1582,6 +1647,8 @@ def run_with_args():
 if __name__ == '__main__':
     logging_setup.setup_console()
     # 你可以保留原来的 run() 用于本地手动测试
+    # You may keep the original run() for local manual testing.
     # run()
     # 失败时返回非 0，和 mtr_timetable.py / mtr_diagram.py 保持一致
+    # Return a non-zero code on failure, consistent with mtr_timetable.py / mtr_diagram.py.
     raise SystemExit(0 if run_with_args() else 1)

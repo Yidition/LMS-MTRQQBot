@@ -6,6 +6,15 @@
 实测 90 条线路里线路级 `dwellTime` 一个都没有、371 个站点全都有，
 所以那个 `.get()` 永远返回默认值 0 —— 停站时间被整体忽略，时刻表里
 "到站/发车"两行永远不会分开。
+
+Shared data-reading helpers for mtr_timetable / mtr_diagram.
+
+Historical bug: dwell time `dwellTime` is attached to **each station object**
+(`routes[x].stations[i].dwellTime`, in milliseconds), yet both scripts read it as a
+route-level field through `route.get('dwellTime', ...)`. Measured on all 90 routes,
+no route carries a route-level `dwellTime` while all 371 stations carry their own,
+so that `.get()` always returned the default 0 — dwell time was ignored as a whole,
+and the "arrival/departure" rows never split in the timetable.
 """
 
 
@@ -15,6 +24,13 @@ def station_dwells(route, stations):
     优先使用站点自带的 ``dwellTime``；为兼容旧数据，若线路级存在
     ``dwellTime`` 数组则整体使用它；两者都没有时返回全 0。
     任何脏数据（None / 非数字）都按 0 处理，不让排版因为缺字段崩掉。
+
+    Return a dwell-time list as long as `stations` (milliseconds, float).
+
+    Station-level ``dwellTime`` is preferred; for backward compatibility, a
+    route-level ``dwellTime`` array is used wholesale when present; when neither
+    exists, all zeros are returned. Any dirty value (None / non-numeric) is
+    treated as 0 so text shaping does not crash on a missing field.
     """
     route_level = route.get("dwellTime") if isinstance(route, dict) else None
     if isinstance(route_level, list) and route_level:
@@ -28,7 +44,7 @@ def station_dwells(route, stations):
 
 
 def _as_ms(value):
-    """把任意值安全地转成毫秒数，非法值返回 0。"""
+    """把任意值安全地转成毫秒数，非法值返回 0。 / Safely convert any value to milliseconds, returning 0 for invalid values."""
     try:
         number = float(value or 0)
     except (TypeError, ValueError):
@@ -39,7 +55,7 @@ def _as_ms(value):
 
 
 def hex_color(value, default="#888888"):
-    """把线路数据里的颜色整数安全地转成 #rrggbb，非法值用灰色兜底。"""
+    """把线路数据里的颜色整数安全地转成 #rrggbb，非法值用灰色兜底。 / Safely convert the color integer in route data to #rrggbb, falling back to grey for invalid values."""
     try:
         return "#{:06x}".format(int(value))
     except (TypeError, ValueError):
@@ -51,6 +67,12 @@ def station_offsets(stations, durations, dwells):
 
     `durations` 是相邻两站之间的运行时间（毫秒），长度应为 ``len(stations) - 1``；
     数据缺失时按 0 处理而不是抛 IndexError。
+
+    Compute the (arrival offset, departure offset) of every station, in seconds.
+
+    `durations` holds the running time between adjacent stations (milliseconds) and
+    should be ``len(stations) - 1`` long; missing data is treated as 0 instead of
+    raising IndexError.
     """
     offsets = []
     current = 0.0

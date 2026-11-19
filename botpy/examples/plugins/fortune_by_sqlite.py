@@ -12,6 +12,20 @@
 5. 表为空时 ``get_fortune()`` 返回 None，随后 ``result.fortune_summary``
    直接 AttributeError；
 6. ``echo=True`` 把每条 SQL 都打进日志。
+
+Historical bugs:
+1. ``class QrFortune:`` / ``class QrFortuneLog:`` did not inherit from ``Base``, so
+   SQLAlchemy never registered them as models (this stayed hidden while only raw SQL
+   was used, but any ORM access raises "Class does not have a __table__");
+2. the database path ``sqlite:///./chat_bot.db`` was relative to the cwd, so starting
+   from another directory silently created an empty database;
+3. the duplicate check used ``date('now')``, which is the **UTC** date, so before
+   08:00 in UTC+8 the same user could draw a fortune twice in one day;
+4. ``execute_init_file`` hard-coded ``"python"``, which may differ from the
+   interpreter that runs the bot;
+5. ``get_fortune()`` returned None on an empty table, and ``result.fortune_summary``
+   then raised AttributeError;
+6. ``echo=True`` wrote every SQL statement to the log.
 """
 
 import os
@@ -24,15 +38,18 @@ from sqlalchemy.orm import sessionmaker
 try:  # SQLAlchemy >= 1.4
     from sqlalchemy.orm import declarative_base
 except ImportError:  # SQLAlchemy 1.3 及更早：declarative_base 在 ext 里
+    # SQLAlchemy 1.3 and earlier: declarative_base lives in sqlalchemy.ext.
     from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
 #: 本文件所在目录（plugins/）与 examples/ 根目录
+#: The directory of this file (plugins/) and the examples/ root directory.
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 EXAMPLES_DIR = os.path.abspath(os.path.join(PLUGIN_DIR, ".."))
 
 #: 数据库文件与初始化脚本，都基于文件位置而不是 cwd
+#: The database file and the init script; both are based on the file location, not the cwd.
 DB_PATH = os.path.join(EXAMPLES_DIR, "chat_bot.db")
 INIT_SCRIPT = os.path.join(EXAMPLES_DIR, "fortune_init_data.py")
 
@@ -73,27 +90,32 @@ class QrFortuneLog(Base):
 
 
 class SqliteSqlalchemy(object):
-    """SQLite 连接工厂。"""
+    """SQLite 连接工厂。 / SQLite connection factory."""
 
     def __init__(self):
         # Windows 路径要转成正斜杠，四斜杠开头表示绝对路径
+        # Windows paths are converted to forward slashes; four leading slashes mean an absolute path.
         url = "sqlite:///" + DB_PATH.replace("\\", "/")
         engine = create_engine(url, echo=False)
         self.session = sessionmaker(bind=engine)()
 
 
 # 查询表是否存在
+# Check whether the table exists.
 selectInit = text(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='qr_fortune';"
 )
 # 随机取一条运势
+# Pick one fortune at random.
 selectFortune = text("select * from qr_fortune order by random() limit 1")
 # 查今天是否已经抽过（本地时区，不是 UTC）
+# Check whether a fortune was already drawn today (local time zone, not UTC).
 selectFortuneLog = text(
     "select * from qr_fortune_log "
     "where user_id = :member_openid and extract_time = date('now','localtime')"
 )
 # 写入抽取日志
+# Write a draw log entry.
 insertFortuneLog = text(
     "insert into qr_fortune_log "
     "(fortune_summary, lucky_star, sign_text, un_sign_text, user_id, extract_time) "
@@ -103,7 +125,7 @@ insertFortuneLog = text(
 
 
 def _child_env():
-    """初始化脚本也强制 UTF-8，避免中文写入数据库时乱码。"""
+    """初始化脚本也强制 UTF-8，避免中文写入数据库时乱码。 / Force UTF-8 for the init script as well, so Chinese text is not garbled when written to the database."""
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
@@ -122,7 +144,7 @@ def _format_fortune(row):
 
 
 def get_today_fortune(member_openid):
-    """返回该用户今天的运势文本（同一天重复调用返回同一条）。"""
+    """返回该用户今天的运势文本（同一天重复调用返回同一条）。 / Return today's fortune text for the user (repeated calls on the same day return the same entry)."""
     if not str(member_openid or "").strip():
         raise ValueError("member_openid 不能为空")
 
@@ -143,7 +165,7 @@ def get_today_fortune(member_openid):
 
 
 def is_get_fortune_log(member_openid):
-    """查询今天是否已抽过；有记录返回该行，否则返回 None。"""
+    """查询今天是否已抽过；有记录返回该行，否则返回 None。 / Check whether a fortune was drawn today; return the row if present, otherwise None."""
     session = SqliteSqlalchemy().session
     try:
         return session.execute(
@@ -154,7 +176,7 @@ def is_get_fortune_log(member_openid):
 
 
 def get_fortune():
-    """随机取一条运势；表为空时先跑一次初始化脚本再取。"""
+    """随机取一条运势；表为空时先跑一次初始化脚本再取。 / Return a random fortune; if the table is empty, run the init script once and retry."""
     session = SqliteSqlalchemy().session
     try:
         row = session.execute(selectFortune).fetchone()
@@ -163,6 +185,7 @@ def get_fortune():
 
     if row is None:
         # 表存在但是空的（或者压根没建表），初始化后重试一次
+        # The table exists but is empty (or was never created); initialize and retry once.
         if execute_init_file():
             session = SqliteSqlalchemy().session
             try:
@@ -178,7 +201,7 @@ def get_fortune():
 
 
 def insert_fortune_log(log):
-    """写入一条抽取记录。"""
+    """写入一条抽取记录。 / Write one draw record."""
     session = SqliteSqlalchemy().session
     try:
         session.execute(
@@ -198,7 +221,7 @@ def insert_fortune_log(log):
 
 
 def database_initialized():
-    """检查并（必要时）初始化数据库，返回表是否已就绪。"""
+    """检查并（必要时）初始化数据库，返回表是否已就绪。 / Check the database and initialize it when needed; return whether the table is ready."""
     session = SqliteSqlalchemy().session
     try:
         exists = session.execute(selectInit).fetchone()
@@ -215,7 +238,7 @@ def database_initialized():
 
 
 def execute_init_file():
-    """执行 fortune_init_data.py 初始化数据库，返回是否成功。"""
+    """执行 fortune_init_data.py 初始化数据库，返回是否成功。 / Run fortune_init_data.py to initialize the database and return whether it succeeded."""
     if not os.path.isfile(INIT_SCRIPT):
         print("找不到初始化脚本：%s" % INIT_SCRIPT)
         return False

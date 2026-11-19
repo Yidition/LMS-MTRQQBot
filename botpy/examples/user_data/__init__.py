@@ -4,6 +4,13 @@
 历史 bug：``base_dir = ''`` 让 ``os.listdir('')`` 直接 FileNotFoundError；
 而且它会尝试把目录下**所有**文件都当 JSON 覆盖（包括 ``__init__.py``）。
 现在只处理同目录的 ``*.json``，路径基于 ``__file__``。
+
+Reset every user's to-do list to empty in one go.
+
+Historical bug: ``base_dir = ''`` made ``os.listdir('')`` raise
+FileNotFoundError outright, and it also tried to overwrite **every** file in the
+directory as JSON (including ``__init__.py``). It now touches only ``*.json`` in
+the same directory, with paths based on ``__file__``.
 """
 
 import json

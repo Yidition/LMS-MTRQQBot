@@ -2,6 +2,10 @@
 """跑全部测试：python -B tests\\run_all.py
 
 退出码 0 表示全绿。
+
+Run all tests: python -B tests\\run_all.py
+
+Exit code 0 means every test passed.
 """
 
 import os

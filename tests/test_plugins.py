@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""插件层测试：待办读写、图床取 token、天气格式化、模块导入无副作用。"""
+"""插件层测试：待办读写、图床取 token、天气格式化、模块导入无副作用。 / Plugin-layer tests: todo read/write, image-host token retrieval, weather formatting, and side-effect-free module imports."""
 
 import os
 import shutil
@@ -19,7 +19,7 @@ def setUpModule():
 
 
 class TestUserTodoList(unittest.TestCase):
-    """待办以前写死 '..\\examples\\user_data\\'，从 examples 启动时目录根本不存在。"""
+    """待办以前写死 '..\\examples\\user_data\\'，从 examples 启动时目录根本不存在。 / The todo path used to be hard-coded as '..\\examples\\user_data\\', and that directory does not exist at all when started from examples."""
 
     @classmethod
     def setUpClass(cls):
@@ -93,7 +93,7 @@ class TestUserTodoList(unittest.TestCase):
 
 
 class TestImgUploadToken(unittest.TestCase):
-    """原来 config['picturesToken'] 缺键会抛 KeyError，现在要给出可操作的提示。"""
+    """原来 config['picturesToken'] 缺键会抛 KeyError，现在要给出可操作的提示。 / A missing config['picturesToken'] key used to raise KeyError; now it must give an actionable hint."""
 
     @classmethod
     def setUpClass(cls):
@@ -177,7 +177,7 @@ class TestWeatherFormatting(unittest.TestCase):
 
 
 class TestWebScreenShotNoSideEffect(unittest.TestCase):
-    """原来 import 这个模块就会拉起 Chrome，现在导入必须无副作用。"""
+    """原来 import 这个模块就会拉起 Chrome，现在导入必须无副作用。 / Importing this module used to launch Chrome; now the import must have no side effects."""
 
     def test_import_is_side_effect_free(self):
         import plugins.web_screen_shot as module
@@ -198,7 +198,7 @@ class TestWebScreenShotNoSideEffect(unittest.TestCase):
 
 
 class TestFortuneModule(unittest.TestCase):
-    """模型要真的是 declarative 模型，数据库路径要绝对。"""
+    """模型要真的是 declarative 模型，数据库路径要绝对。 / The models must really be declarative models, and the database path must be absolute."""
 
     def test_models_are_registered(self):
         import plugins.fortune_by_sqlite as module

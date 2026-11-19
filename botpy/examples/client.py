@@ -17,19 +17,26 @@ from script_runner import run_script
 # 所有外部脚本都以 examples 目录为工作目录运行：脚本内部大量使用相对路径
 # （mtr_pathfinder_data / mtr_pathfinder_temp / chat_bot.db / mtr-*.json），
 # cwd 不对就会读不到资源或把缓存写到奇怪的地方。
+# All external scripts run with the examples directory as their working directory: they
+# use many relative paths (mtr_pathfinder_data / mtr_pathfinder_temp / chat_bot.db /
+# mtr-*.json), so a wrong cwd misses resources or writes the cache to odd places.
 EXAMPLES_DIR = cmds.EXAMPLES_DIR
 CONFIG_PATH = os.path.join(EXAMPLES_DIR, "config.yaml")
 
 #: 与 QQ 开放平台交互的 HTTP 超时，避免网络卡住时整个 handler 挂死
+#: HTTP timeout for QQ Open Platform requests, so a stalled network cannot hang the handler.
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=60)
 
 # 统一日志：<examples>/logs/bot.log（UTF-8，按大小轮转），同时把 botpy 自己的
 # 日志并进同一个文件。日志目录不可写时自动降级为只输出控制台。
+# Unified logging: <examples>/logs/bot.log (UTF-8, rotated by size), with botpy's own
+# logs merged into the same file. If the log directory is not writable, logging degrades
+# to console output only.
 _log = logging_setup.setup(merge_botpy=True)
 
 
 def load_config(path=CONFIG_PATH):
-    """读取并校验 config.yaml，缺关键字段时给出可读的报错而不是 KeyError。"""
+    """读取并校验 config.yaml，缺关键字段时给出可读的报错而不是 KeyError。 / Read and validate config.yaml, raising a readable error instead of KeyError when key fields are missing."""
     if not os.path.isfile(path):
         raise SystemExit(
             "找不到配置文件：%s\n请按 README 填写 appid / secret 后再启动。" % path
@@ -50,6 +57,7 @@ if not str(test_config.get("picturesToken", "")).strip():
 
 # ==========================================
 # 核心底层：直接通过 HTTP 请求发送 Base64 图片
+# Core internals: send Base64 images directly over HTTP.
 # ==========================================
 async def send_base64_image(client, group_openid, msg_id, file_path):
     started = time.perf_counter()
@@ -133,7 +141,7 @@ class MyClient(botpy.Client):
         _log.info(f"机器人「{self.robot.name}」启动完成！")
 
     async def _reply(self, message, content):
-        """回复一条文本消息。"""
+        """回复一条文本消息。 / Reply with a text message."""
         await message._api.post_group_message(
             group_openid=message.group_openid,
             msg_type=0,
@@ -147,13 +155,19 @@ class MyClient(botpy.Client):
 
         写到系统临时目录而不是项目目录：机器人工作目录可能是只读的，
         而且原来的实现会把 png 散落在 examples 下面。
+
+        Allocate a temp image path for this request.
+
+        Write to the system temp directory rather than the project directory: the bot's
+        working directory may be read-only, and the old implementation scattered PNGs
+        under examples.
         """
         safe = re.sub(r"[^\w\-]", "_", str(message_id))[:64] or "msg"
         return os.path.join(tempfile.gettempdir(), "mtrqqbot_%s_%s.png" % (prefix, safe))
 
     async def _generate_and_send(self, message, label, script, args, output_path,
                                  timeout=cmds.SCRIPT_TIMEOUT):
-        """跑脚本 → 校验产物 → 上传发送，失败时把原因回给用户。"""
+        """跑脚本 → 校验产物 → 上传发送，失败时把原因回给用户。 / Run the script, verify the output, then upload and send it; report failures to the user."""
         try:
             result = await run_script(script, *args, timeout=timeout)
             if result is None:
@@ -180,7 +194,7 @@ class MyClient(botpy.Client):
             )
             if not sent:
                 await self._reply(message, "%s生成成功，但上传失败。" % label)
-        except Exception as exc:  # 兜底，别让单个请求把 handler 打挂
+        except Exception as exc:  # 兜底，别让单个请求把 handler 打挂 / Fallback: never let one request kill the handler
             _log.exception("%s 处理异常", label)
             await self._reply(message, "系统执行出错：%s" % exc)
         finally:
@@ -196,10 +210,12 @@ class MyClient(botpy.Client):
         _log.info("bot 收到消息: %s", raw)
 
         # 先剥掉 --no-xxx 寻路参数，再识别命令
+        # Strip the --no-xxx pathfinding options first, then match the command.
         clean_msg, final_args = cmds.split_no_options(raw)
         command, rest = cmds.match_command(clean_msg)
 
         # ======= 隐藏指令 1：测试存活 =======
+        # ======= Hidden command 1: liveness check =======
         if command == "ping":
             await message._api.post_group_message(
                 group_openid=message.group_openid,
@@ -210,6 +226,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 隐藏指令 2：彩蛋 =======
+        # ======= Hidden command 2: easter egg =======
         elif command == "secret":
             await message._api.post_group_message(
                 group_openid=message.group_openid,
@@ -220,6 +237,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 整活指令：/ds-think =======
+        # ======= Gag command: /ds-think =======
         elif command == "ds-think":
             think_text = (
                 "分析问题所在：\n"
@@ -246,6 +264,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：朋友的酒歌词 =======
+        # ======= Command: lyrics of "A Friend's Wine" =======
         elif command == "xjy":
             lyrics = (
                 "《朋友的酒》 - 李晓杰\n\n"
@@ -275,6 +294,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：/ban 封禁整活 =======
+        # ======= Command: /ban ban gag =======
         elif command == "ban":
             ban_text = (
                 "JS功能目前处于高度试验性状态，可能包含大量 bug\n"
@@ -306,6 +326,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：/jam 堵车整活 =======
+        # ======= Command: /jam traffic-jam gag =======
         elif command == "jam":
             jam_text = (
                 "怎么DTMR又堵车了？！\n"
@@ -321,6 +342,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：/lps 找人 =======
+        # ======= Command: /lps looking for players =======
         elif command == "lps":
             await message._api.post_group_message(
                 group_openid=message.group_openid,
@@ -331,6 +353,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：/时刻表 线路名 =======
+        # ======= Command: /timetable <route name> =======
         elif command == "timetable":
             route_name = rest
             if not route_name:
@@ -347,6 +370,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 指令：/运行图 线路名 =======
+        # ======= Command: /diagram <route name> =======
         elif command == "diagram":
             route_name = rest
             if not route_name:
@@ -363,6 +387,7 @@ class MyClient(botpy.Client):
             return
 
         # ======= 正常寻路指令 (/go 或 /路线) =======
+        # ======= Normal pathfinding command (/go or /路线) =======
         elif command == "route":
             input_content = rest
             

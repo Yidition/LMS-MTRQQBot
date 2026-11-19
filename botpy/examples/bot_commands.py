@@ -6,6 +6,15 @@
 就可以直接写单元测试覆盖。
 
 本模块刻意只依赖标准库。
+
+Pure logic of client.py: command parsing, subprocess command construction, and script
+output interpretation.
+
+This logic used to live in ``client.py``, which starts with ``import botpy``, so environments
+without botpy installed could not test it at all. Moving the parts that do not depend on
+the network or the bot framework here makes them directly unit-testable.
+
+This module deliberately depends only on the standard library.
 """
 
 import os
@@ -13,12 +22,16 @@ import re
 import sys
 
 #: examples 目录（本文件所在目录），所有脚本与资源路径都以它为基准
+#: examples directory (the directory of this file); all script and resource paths are
+#: based on it
 EXAMPLES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #: 外部脚本默认超时（秒）
+#: Default timeout for external scripts (seconds).
 SCRIPT_TIMEOUT = 180
 
 #: 匹配 --no-xxx 形式的寻路参数
+#: Match pathfinding options of the --no-xxx form.
 NO_OPTION_RE = re.compile(r"--no-[^\s]+")
 
 USAGE_ROUTE = "格式：/go 或 /路线 [起点];[终点] [可选参数]\n可选参数：--no-highspeed, --no-lightrail, --no-[线路名]"
@@ -26,6 +39,8 @@ USAGE_ROUTE = "格式：/go 或 /路线 [起点];[终点] [可选参数]\n可选
 SEMICOLON_HINT = "格式不正确，请使用英文分号';'分隔起点和终点。\n例如：/go Badland;Glass --no-highspeed"
 
 #: 命令表：按顺序匹配，长/具体的放前面。第二个元素是命令前缀。
+#: Command table: matched in order, longer/more specific entries first. The second element
+#: is the command prefix.
 COMMANDS = (
     ("ping", "/ping"),
     ("secret", "/secret"),
@@ -41,6 +56,7 @@ COMMANDS = (
 )
 
 #: 直接回文本的整活指令
+#: Gag commands that reply with text directly.
 CHITCHAT_COMMANDS = ("ping", "secret", "ds-think", "xjy", "ban", "jam", "lps")
 
 
@@ -51,6 +67,13 @@ def split_no_options(message):
 
     ``--no-highspeed`` / ``--no-lightrail`` 原样保留，
     其它 ``--no-线路名`` 会展开成 ``--no-line 线路名``。
+
+    Strip ``--no-xxx`` options out of the message.
+
+    Returns ``(cleaned message, argument list passed to the pathfinding script)``.
+
+    ``--no-highspeed`` / ``--no-lightrail`` are kept as is, while any other
+    ``--no-<route name>`` expands to ``--no-line <route name>``.
     """
     message = message or ""
     args = []
@@ -67,6 +90,12 @@ def match_command(text):
     """识别命令，返回 ``(命令名, 该命令之后的文本)``；无法识别时返回 ``(None, '')``。
 
     ASCII 命令要求前缀后面紧跟空白或字符串结尾，避免 ``/go`` 误吞 ``/google``。
+
+    Identify the command and return ``(command name, text after it)``; return ``(None, '')``
+    when nothing matches.
+
+    ASCII commands require whitespace or end of string right after the prefix, so ``/go``
+    cannot swallow ``/google``.
     """
     text = (text or "").strip()
     for name, prefix in COMMANDS:
@@ -74,6 +103,7 @@ def match_command(text):
             continue
         rest = text[len(prefix):]
         # 前缀以字母数字结尾时要求词边界
+        # Require a word boundary when the prefix ends with an alphanumeric character.
         if prefix[-1].isascii() and prefix[-1].isalnum():
             if rest and not rest[0].isspace():
                 continue
@@ -82,7 +112,7 @@ def match_command(text):
 
 
 def parse_route_request(rest):
-    """解析 ``起点;终点``，返回 ``{'ok': True, 'start': ..., 'end': ...}`` 或错误信息。"""
+    """解析 ``起点;终点``，返回 ``{'ok': True, 'start': ..., 'end': ...}`` 或错误信息。 / Parse ``start;end``, returning ``{'ok': True, 'start': ..., 'end': ...}`` or an error message."""
     rest = (rest or "").strip()
     if not rest:
         return {"ok": False, "error": USAGE_ROUTE}
@@ -106,6 +136,12 @@ def python_executable():
     优先 ``MTR_PYTHON`` 环境变量，其次当前解释器。**不能用 ``py``**：
     它指向的是 py launcher 的默认版本，和跑机器人的解释器很可能不是同一个，
     缺依赖时会直接 ModuleNotFoundError。
+
+    Pick an interpreter for running external scripts.
+
+    Prefer the ``MTR_PYTHON`` environment variable, then the current interpreter.
+    **Do not use ``py``**: it points to the py launcher's default version, which is likely
+    not the interpreter running the bot, so missing dependencies raise ModuleNotFoundError.
     """
     override = os.environ.get("MTR_PYTHON")
     if override:
@@ -117,6 +153,10 @@ def build_script_command(script, *args, **kwargs):
     """构造执行脚本的完整命令行。
 
     ``-B`` 保证不写 ``__pycache__``，避免在只读目录下跑不起来。
+
+    Build the full command line for running a script.
+
+    ``-B`` keeps ``__pycache__`` from being written, so it also runs in read-only directories.
     """
     python = kwargs.pop("python", None)
     if kwargs:
@@ -128,7 +168,7 @@ def build_script_command(script, *args, **kwargs):
 
 
 def child_env():
-    """子进程环境：强制 UTF-8，避免 GBK 输出被按 UTF-8 解码时炸掉。"""
+    """子进程环境：强制 UTF-8，避免 GBK 输出被按 UTF-8 解码时炸掉。 / Subprocess environment: force UTF-8 so GBK output does not break UTF-8 decoding."""
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
@@ -140,6 +180,11 @@ def interpret_result(stdout, stderr, returncode=None):
 
     成功契约：脚本在 stdout 打印 ``SUCCESS:<路径>``。
     失败时优先用 stderr（traceback 更有价值），没有就退回 stdout。
+
+    Decide whether the script succeeded and return ``(success, error summary)``.
+
+    Success contract: the script prints ``SUCCESS:<path>`` to stdout.
+    On failure prefer stderr (a traceback is more useful), falling back to stdout.
     """
     stdout = stdout or ""
     stderr = stderr or ""
@@ -154,6 +199,7 @@ def interpret_result(stdout, stderr, returncode=None):
             message += "（返回码 %s）" % returncode
 
     # 去掉脚本固定打印的 FAILED 噪音行
+    # Drop the noisy FAILED line that scripts always print.
     lines = [line for line in message.splitlines() if line.strip() and line.strip() != "FAILED"]
     message = "\n".join(lines) or "脚本执行失败（无详细信息）"
     return False, message[-300:]

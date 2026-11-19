@@ -1,5 +1,7 @@
 # MTR 寻路 Bot
 
+> 中文 · [English](README.en.md)
+
 一个基于 QQ 官方机器人 API 的 Minecraft Transit Railway 寻路 / 出图机器人：
 在群里 @ 机器人发送指令，它会算出两站之间的最优路线、生成时刻表或列车运行图，并把图片发回群里。
 
@@ -180,10 +182,13 @@ python -B tests\run_all.py
 
 ```
 MTRPathQQBot-main/
-├─ README.md                 本文件
+├─ README.md                 本文件（中文）
+├─ README.en.md              英文版
 ├─ LICENSE                   GPL-3.0-only 协议全文
 ├─ THIRD-PARTY-NOTICES.md    上游来源、修改声明、第三方组件协议
+├─ THIRD-PARTY-NOTICES.en.md 同上，英文版
 ├─ 项目结构.md               目录职责、路径依赖、修复记录、已知问题（建议一并看）
+├─ 项目结构.en.md            同上，英文版
 ├─ requirements.txt
 ├─ tests/                    自动化测试
 └─ botpy/examples/           ★ 工作目录

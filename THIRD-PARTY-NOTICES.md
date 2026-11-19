@@ -1,5 +1,7 @@
 # 第三方组件与来源声明
 
+> 中文 · [English](THIRD-PARTY-NOTICES.en.md)
+
 本文件记录本项目（MTR 寻路 Bot）的来源、修改情况，以及随仓库分发的第三方组件。
 项目整体以 **GPL-3.0-only** 授权，全文见 [LICENSE](LICENSE)。
 
@@ -31,7 +33,7 @@ CokeStudios/mtr-pathfinder  (GPL-3.0)
 - 修正停站时间与站名取值错误（时刻表、运行图）
 - 重构命令解析、对外脚本调用与日志机制（新增 `bot_commands.py`、`script_runner.py`、`logging_setup.py`）
 - 修复插件层的路径、配置读取与异常处理
-- 新增自动化测试 `tests/`（96 项）
+- 新增自动化测试 `tests/`（112 项）
 
 本项目**不是**上述任一作品的官方版本，也未获得任何商业背书。
 

@@ -8,18 +8,32 @@
 
 现在目录基于 ``__file__`` 计算，可用 ``MTR_USER_DATA_DIR`` 环境变量覆盖（便于测试），
 并且任何一次读写前都会自动创建目录。
+
+Small JSON utility that stores to-do lists by user openid.
+
+Historical bug: the directory was hard-coded as ``'..\\examples\\user_data\\'``. When
+running from the examples directory (the startup directory required by the README),
+that relative path resolved to ``<project>/examples/user_data/`` — a directory that
+does not exist, so every to-do feature (including creating a file) raised
+FileNotFoundError right away.
+
+The directory is now derived from ``__file__`` and can be overridden with the
+``MTR_USER_DATA_DIR`` environment variable (handy for tests), and it is created
+automatically before every read or write.
 """
 
 import json
 import os
 
 #: 待办 JSON 的存放目录
+#: Directory that stores the to-do JSON files.
 DATA_DIR = os.path.abspath(
     os.environ.get("MTR_USER_DATA_DIR")
     or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "user_data")
 )
 
 #: 列表为空时的占位文案
+#: Placeholder text for an empty to-do list.
 EMPTY_HINT = "还没有待办qwq"
 
 
@@ -29,7 +43,7 @@ def _ensure_dir():
 
 
 def _user_path(user_name):
-    """拼出某个用户的 JSON 路径，并清洗文件名（openid 里不该出现路径分隔符）。"""
+    """拼出某个用户的 JSON 路径，并清洗文件名（openid 里不该出现路径分隔符）。 / Build the JSON path for a user and sanitize the file name (an openid should not contain path separators)."""
     safe = str(user_name or "").strip().replace("/", "_").replace("\\", "_")
     if not safe:
         raise ValueError("user_name 不能为空")
@@ -41,12 +55,18 @@ def _clean(todos):
 
     老版本创建用户文件时会写入 ``[占位文案, ' ']``，那个 ``' '`` 会占掉一个
     序号，导致 delete(1) 删到的是空格而不是第一条待办。
+
+    Filter out the blank placeholder items left by older versions.
+
+    The old version wrote ``[placeholder text, ' ']`` when creating a user file, and
+    that ``' '`` consumed one index, so delete(1) removed the space instead of the
+    first to-do item.
     """
     return [str(item) for item in (todos or []) if str(item).strip()]
 
 
 def _read(user_name):
-    """读取待办列表；文件不存在返回 None。"""
+    """读取待办列表；文件不存在返回 None。 / Read the to-do list; return None when the file does not exist."""
     path = _user_path(user_name)
     if not os.path.isfile(path):
         return None
@@ -65,7 +85,7 @@ def _write(user_name, todos):
 
 
 def show(user_name):
-    """返回该用户的待办列表；文件不存在时创建并返回 -1。"""
+    """返回该用户的待办列表；文件不存在时创建并返回 -1。 / Return the user's to-do list; when the file is missing, create it and return -1."""
     todos = _read(user_name)
     if todos is None:
         return file_not_found(DATA_DIR, user_name)
@@ -73,12 +93,13 @@ def show(user_name):
 
 
 def insert(user_name, todo):
-    """追加一条待办，返回 1；用户文件不存在时创建并返回 -1。"""
+    """追加一条待办，返回 1；用户文件不存在时创建并返回 -1。 / Append one to-do item and return 1; when the user file is missing, create it and return -1."""
     todos = _read(user_name)
     if todos is None:
         return file_not_found(DATA_DIR, user_name)
 
     # 原来的实现用 in-place clear()，会把调用方持有的列表也清掉
+    # The old implementation used an in-place clear(), which also emptied the caller's list.
     todo = "" if todo is None else str(todo)
     cleaned = [item for item in todos if item != EMPTY_HINT]
     cleaned.append(todo)
@@ -91,6 +112,10 @@ def delete(user_name, num):
 
     列表删空后写回占位文案，而不是像以前那样把整张表重置。
     越界返回 -2，用户文件不存在返回 -1。
+
+    When the list becomes empty the placeholder text is written back, instead of
+    resetting the whole table as before. An out-of-range index returns -2, and a
+    missing user file returns -1.
     """
     todos = _read(user_name)
     if todos is None:
@@ -114,7 +139,7 @@ def delete(user_name, num):
 
 
 def init(user_name):
-    """把该用户的待办重置为空，返回 1；文件不存在时创建并返回 -1。"""
+    """把该用户的待办重置为空，返回 1；文件不存在时创建并返回 -1。 / Reset the user's to-do list to empty and return 1; when the file is missing, create it and return -1."""
     print("[Warning] Initializing ToDo List of '%s'" % user_name)
     if _read(user_name) is None:
         return file_not_found(DATA_DIR, user_name)
@@ -124,7 +149,7 @@ def init(user_name):
 
 
 def file_not_found(base_dir, user_name):
-    """用户文件不存在时创建它，并返回 -1（保持原有返回值约定）。"""
+    """用户文件不存在时创建它，并返回 -1（保持原有返回值约定）。 / Create the user file when it is missing and return -1 (keeping the original return-value contract)."""
     path = _user_path(user_name)
     print("[Warning] File '%s' not found" % path)
     print("[Info] Creating file '%s'" % path)

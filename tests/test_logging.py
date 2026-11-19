@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""logging_setup 的测试：落盘、UTF-8、请求 id、轮转、级别、降级、装饰器。"""
+"""logging_setup 的测试：落盘、UTF-8、请求 id、轮转、级别、降级、装饰器。 / Tests for logging_setup: file output, UTF-8, request id, rotation, levels, degrade, and the decorator."""
 
 import asyncio
 import io
@@ -18,7 +18,7 @@ import logging_setup
 
 
 def _flush():
-    """断言文件内容前先把处理器缓冲刷出去。"""
+    """断言文件内容前先把处理器缓冲刷出去。 / Flush the handler buffers before asserting on file content."""
     for handler in logging.getLogger(logging_setup.ROOT_LOGGER).handlers:
         try:
             handler.flush()
@@ -47,6 +47,8 @@ class LoggingTestCase(unittest.TestCase):
 
     def tearDown(self):
         # 先换成控制台配置，避免处理器还指着即将删除的目录
+        # Switch to the console configuration first so no handler still points
+        # at the directory about to be deleted.
         logging_setup.setup_console()
         os.environ.pop(logging_setup.ENV_DIR, None)
         shutil.rmtree(self.log_dir, ignore_errors=True)
@@ -72,6 +74,8 @@ class TestFileOutput(LoggingTestCase):
         line = _read(self.log_path).strip().splitlines()[-1]
         self.assertIn("WARNING", line)
         # 格式里要能看出是哪个文件哪一行发的，否则日志没法定位
+        # The format must reveal which file and line emitted the record,
+        # otherwise the log cannot be used to locate problems.
         self.assertIn("test_logging.py", line)
         self.assertRegex(line, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 
@@ -106,6 +110,8 @@ class TestLevels(LoggingTestCase):
 
     def test_console_default_is_warning(self):
         # 子进程的 stderr 是 client 判断失败的依据，默认不能被 INFO 污染
+        # The subprocess stderr is what client uses to judge failure, so it must
+        # not be polluted with INFO output by default.
         logger = logging_setup.setup_console()
         self.assertEqual(logger.getEffectiveLevel(), logging.WARNING)
         self.assertFalse(logger.isEnabledFor(logging.INFO))
@@ -158,6 +164,8 @@ class TestIdempotency(LoggingTestCase):
         logger.info("第二次")
         lines = _read(self.log_path).splitlines()
         # 第二次 setup 后每条日志只能出现一次（处理器没被重复添加）
+        # After the second setup each log record must appear only once (no
+        # handler was added twice).
         self.assertEqual(len([l for l in lines if "第一次" in l]), 1, lines)
         self.assertEqual(len([l for l in lines if "第二次" in l]), 1, lines)
 
@@ -257,7 +265,7 @@ class TestTraced(unittest.TestCase):
 
 
 class TestClientWiring(unittest.TestCase):
-    """client.py 无法在本环境 import（缺 botpy），只能做源码约束检查。"""
+    """client.py 无法在本环境 import（缺 botpy），只能做源码约束检查。 / client.py cannot be imported in this environment (botpy is missing), so only source contract checks are possible."""
 
     @classmethod
     def setUpClass(cls):
@@ -279,7 +287,7 @@ class TestClientWiring(unittest.TestCase):
 
 
 class TestRunScriptLogging(unittest.TestCase):
-    """真跑一次 script_runner，验证子进程日志完整落盘。"""
+    """真跑一次 script_runner，验证子进程日志完整落盘。 / Run script_runner for real once to verify that subprocess logs land in the file completely."""
 
     def setUp(self):
         self.log_dir = tempfile.mkdtemp(prefix="mtr-run-")
@@ -310,6 +318,7 @@ class TestRunScriptLogging(unittest.TestCase):
         text = _read(self.log_path)
         self.assertIn("执行外部脚本 script=mtr_timetable.py", text)
         # 关键：耗时、返回码、输出大小都记下来了
+        # The key point: duration, return code, and output size are all logged.
         self.assertRegex(text, r"脚本结束 script=mtr_timetable\.py rc=0 耗时=\d+ms stdout=\d+B")
 
     def test_failed_run_is_logged_with_reason(self):
@@ -334,6 +343,8 @@ class TestRunScriptLogging(unittest.TestCase):
 
         text = _read(self.log_path)
         # 回给用户的消息只保留 300 字符，完整原文必须能在日志里找到
+        # Only 300 characters are kept in the reply to the user, so the full
+        # original output must be findable in the log.
         self.assertIn("stdout of mtr_timetable.py", text)
         self.assertIn("SUCCESS:", text)
 

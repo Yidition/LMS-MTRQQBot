@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""bot_commands 的单元测试：命令解析、命令行构造、脚本输出判定。"""
+"""bot_commands 的单元测试：命令解析、命令行构造、脚本输出判定。 / Unit tests for bot_commands: command parsing, command-line construction, and script output interpretation."""
 
 import os
 import sys
@@ -30,6 +30,7 @@ class TestSplitNoOptions(unittest.TestCase):
 
     def test_lone_prefix_is_not_a_flag(self):
         # '--no-' 后面没有内容，不应该被当成参数
+        # Nothing follows '--no-', so it must not be treated as an argument.
         clean, args = cmds.split_no_options("/go A;B --no-")
         self.assertIn("--no-", clean)
         self.assertEqual(args, [])
@@ -43,6 +44,7 @@ class TestMatchCommand(unittest.TestCase):
 
     def test_ascii_commands_need_word_boundary(self):
         # 这条是修 /go 误吞 /google 的回归测试
+        # This is the regression test for /go swallowing /google.
         self.assertEqual(cmds.match_command("/google 搜索"), (None, ""))
         self.assertEqual(cmds.match_command("/pingpong"), (None, ""))
         self.assertEqual(cmds.match_command("/ping"), ("ping", ""))
@@ -95,6 +97,9 @@ class TestScriptCommand(unittest.TestCase):
     def test_uses_current_interpreter_not_py_launcher(self):
         # 修的是 client.py 里写死 ['py', ...] 的 bug：py 指向的解释器
         # 和跑机器人的解释器可能不是同一个，会缺依赖
+        # This fixes the bug in client.py that hard-codes ['py', ...]: the
+        # interpreter py points to may differ from the one running the bot and
+        # therefore lack dependencies.
         command = cmds.build_script_command("mtr_diagram.py", "7号线")
         self.assertEqual(command[0], sys.executable)
         self.assertNotEqual(os.path.basename(command[0]).lower(), "py.exe")

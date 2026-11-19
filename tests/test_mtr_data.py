@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""mtr_data 的单元测试，并用真实缓存数据校验"停站时间在站点上"这个前提。"""
+"""mtr_data 的单元测试，并用真实缓存数据校验"停站时间在站点上"这个前提。 / Unit tests for mtr_data, plus validation of the "dwell time lives on stations" premise against real cache data."""
 
 import json
 import os
@@ -20,7 +20,7 @@ def load_cache():
 
 
 class TestRealDataShape(unittest.TestCase):
-    """这些断言记录的是当初 bug 的根因，数据格式变了要立刻发现。"""
+    """这些断言记录的是当初 bug 的根因，数据格式变了要立刻发现。 / These assertions record the root cause of the original bug, so any change in the data format is noticed immediately."""
 
     @classmethod
     def setUpClass(cls):
@@ -69,21 +69,27 @@ class TestStationOffsets(unittest.TestCase):
     def test_dwell_separates_arrival_and_departure(self):
         stations = [{}, {}, {}]
         durations = [1000, 2000]          # 毫秒
+        # Milliseconds.
         dwells = [0, 10000, 0]            # 中间站停 10 秒
+        # The middle station dwells for 10 seconds.
         offsets = station_offsets(stations, durations, dwells)
 
         self.assertEqual(offsets[0], (0.0, 0.0))
         # 第一站到第二站运行 1 秒
+        # Running from the first station to the second takes 1 second.
         self.assertAlmostEqual(offsets[1][0], 1.0)
         # 停站 10 秒
+        # Dwell for 10 seconds.
         self.assertAlmostEqual(offsets[1][1], 11.0)
         # 再运行 2 秒
+        # Then run for another 2 seconds.
         self.assertAlmostEqual(offsets[2][0], 13.0)
 
     def test_short_durations_do_not_raise(self):
         offsets = station_offsets([{}, {}, {}], [1000], [0, 0, 0])
         self.assertEqual(len(offsets), 3)
         self.assertAlmostEqual(offsets[2][0], 1.0)   # 缺失的时长按 0 处理
+        # Missing durations are treated as 0.
 
     def test_missing_dwells_do_not_raise(self):
         offsets = station_offsets([{}, {}], [500], [])

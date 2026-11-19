@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""测试公共设施：定位 examples 目录、准备可写工作区、给 botpy 打桩。"""
+"""测试公共设施：定位 examples 目录、准备可写工作区、给 botpy 打桩。 / Shared test infrastructure: locate the examples directory, prepare a writable workspace, and stub botpy."""
 
 import os
 import shutil
@@ -12,6 +12,7 @@ PROJECT_DIR = os.path.abspath(os.path.join(TESTS_DIR, ".."))
 EXAMPLES_DIR = os.path.join(PROJECT_DIR, "botpy", "examples")
 
 #: 项目脚本里写死的本地地图服务地址，缓存文件名由它的 md5 决定
+#: The local map service address hard-coded in the project scripts; cache file names derive from its md5.
 LINK = "http://localhost:1025"
 LINK_HASH = "1bb6987c13cf561edb12699724a8f64f"
 
@@ -29,7 +30,7 @@ def ensure_examples_on_path():
 
 
 def child_env():
-    """和 client.py 一致的子进程环境（强制 UTF-8）。"""
+    """和 client.py 一致的子进程环境（强制 UTF-8）。 / Child process environment matching client.py (forces UTF-8)."""
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
@@ -41,6 +42,11 @@ def workspace():
 
     脚本全部使用相对 cwd 的路径（mtr_pathfinder_data / 缓存 json /
     mtr_pathfinder_temp），所以要测试它们就必须给一个既能读数据、又能写产物的目录。
+
+    Prepare a writable simulated working directory and return its path (it is
+    created only once per process). The scripts all use cwd-relative paths
+    (mtr_pathfinder_data / cache json / mtr_pathfinder_temp), so testing them
+    requires a directory that can both read data and write output artifacts.
     """
     global _workspace
     if _workspace is not None:
@@ -61,6 +67,10 @@ def workspace():
     # 出图脚本会把本目录注册进 DLL 搜索路径（raqm_support.py），
     # 复制脚本到工作区时这两个 DLL 必须一起过去，否则渲染会报
     # "not supported without libraqm"
+    # The rendering scripts register this directory on the DLL search path
+    # (raqm_support.py), so both DLLs must be copied into the workspace along
+    # with the scripts; otherwise rendering fails with
+    # "not supported without libraqm".
     for name in ("libraqm.dll", "fribidi-0.dll"):
         source = os.path.join(EXAMPLES_DIR, name)
         if os.path.isfile(source):
@@ -81,6 +91,10 @@ def stub_botpy():
     """给没装 qq-botpy 的环境造一个最小替身，只为能 import 插件。
 
     插件真正需要的只有 ``botpy.ext.cog_yaml.read``。
+
+    Create a minimal stub for environments without qq-botpy, only so that the
+    plugins can be imported. The only thing the plugins actually need is
+    ``botpy.ext.cog_yaml.read``.
     """
     import yaml
 

@@ -8,6 +8,20 @@
    AttributeError；
 3. ``delete_img()`` 依赖模块级变量，没先调用 upload 就是 NameError；
 4. ``open(path)`` 没有关闭文件句柄，requests 请求也没有超时。
+
+Wrapper around the sm.ms image host: upload an image, delete the image just
+uploaded, and pick a random historical image.
+
+Historical bugs:
+1. ``config['picturesToken']`` was indexed directly — a config.yaml without that
+   key raised KeyError, and the error gave no hint that the configuration was at
+   fault;
+2. when an upload failed (e.g. duplicate file), ``res['data']`` was None and
+   ``data.get()`` raised AttributeError;
+3. ``delete_img()`` relied on a module-level variable, so calling it before
+   upload raised NameError;
+4. ``open(path)`` never closed the file handle, and the requests call had no
+   timeout.
 """
 
 import os
@@ -23,9 +37,11 @@ API_URL = "https://sm.ms/api/v2/upload"
 HISTORY_URL = "https://sm.ms/api/v2/upload_history"
 
 #: 请求超时（秒）
+#: Request timeout (seconds).
 TIMEOUT = 30
 
 #: 上一次 upload() 返回的删除链接（兼容原有全局变量用法）
+#: Delete link returned by the last upload() (keeps the original global-variable usage working).
 url_delete = None
 
 
@@ -36,7 +52,7 @@ def _load_config():
 
 
 def _token():
-    """取出图床 token，缺失时给出可操作的提示而不是 KeyError。"""
+    """取出图床 token，缺失时给出可操作的提示而不是 KeyError。 / Fetch the image host token; raise an actionable message instead of KeyError when it is missing."""
     token = str(_load_config().get("picturesToken", "") or "").strip()
     if not token:
         raise RuntimeError(
@@ -47,7 +63,7 @@ def _token():
 
 
 def _json(response):
-    """解析响应体，非 JSON 时抛出带状态码的可读错误。"""
+    """解析响应体，非 JSON 时抛出带状态码的可读错误。 / Parse the response body; raise a readable error with the status code when it is not JSON."""
     try:
         return response.json()
     except ValueError:
@@ -58,7 +74,7 @@ def _json(response):
 
 
 def upload(path):
-    """上传一张本地图片，返回图片 URL；失败抛 RuntimeError。"""
+    """上传一张本地图片，返回图片 URL；失败抛 RuntimeError。 / Upload a local image and return its URL; raise RuntimeError on failure."""
     global url_delete
 
     if not os.path.isfile(path):
@@ -73,6 +89,7 @@ def upload(path):
     payload = _json(response)
     if not payload.get("success"):
         # sm.ms 在"文件已存在"这类情况下 success=false，data 为 None
+        # sm.ms returns success=false and data=None for cases such as "file already exists".
         raise RuntimeError("图床上传失败：%s" % (payload.get("message") or payload))
 
     data = payload.get("data") or {}
@@ -90,6 +107,12 @@ def delete_img(url=None):
 
     删除链接是网页而不是 API，所以这里必须走 selenium。没装 selenium 时
     只影响本函数，不影响 upload()。
+
+    Open the delete link in a headless browser and delete the image just uploaded.
+
+    The delete link is a web page rather than an API, so selenium is required here.
+    When selenium is not installed, only this function is affected; upload() still
+    works.
     """
     target = url or url_delete
     if not target:
@@ -110,7 +133,7 @@ def delete_img(url=None):
 
 
 def get_upload_history():
-    """随机返回一张历史上传图片的 URL。"""
+    """随机返回一张历史上传图片的 URL。 / Return the URL of a random previously uploaded image."""
     headers = {"Authorization": _token()}
     response = requests.get(
         HISTORY_URL, headers=headers, params={"page": "1"}, timeout=TIMEOUT

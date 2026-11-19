@@ -23,6 +23,32 @@ Pillow 的复杂文本排版能力（`ImageDraw.text` 的 ``direction`` / ``lang
 
     import raqm_support  # noqa: F401
     from PIL import Image, ImageDraw, ImageFont
+
+Make Pillow find the libraqm / fribidi DLLs shipped with the project.
+
+Pillow's complex text shaping (the ``direction`` / ``language`` / ``features``
+arguments of `ImageDraw.text`) depends on libraqm. This project ships
+``libraqm.dll`` and its dependency ``fribidi-0.dll`` in the examples directory,
+but Windows does not search the "script's own directory" by default, so whenever
+the current working directory is not examples, `PIL.features.check('raqm')`
+returns False and every render raises:
+
+    ValueError: setting text direction, language or font features is not
+    supported without libraqm
+
+Three approaches were measured (Pillow 10.4 / Python 3.8):
+
+    os.add_dll_directory(...)   → no effect, Pillow uses plain LoadLibrary internally
+    adding the directory to PATH → works, but pollutes a global environment variable
+    ctypes preload by absolute path → works, and affects only this process  ← used here
+
+Once preloaded, both modules already reside in the process, so Pillow's later
+LoadLibrary by file name hits them directly and needs no search path.
+
+**Must be imported before `from PIL import ...`**:
+
+    import raqm_support  # noqa: F401
+    from PIL import Image, ImageDraw, ImageFont
 """
 
 import os
@@ -30,9 +56,11 @@ import os
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #: 预加载成功的 DLL 路径
+#: Paths of the DLLs preloaded successfully.
 loaded = []
 
 #: WinDLL 句柄必须保持引用，否则模块可能被卸载
+#: WinDLL handles must stay referenced, otherwise the module may be unloaded.
 _handles = []
 
 
@@ -42,6 +70,7 @@ def _preload() -> None:
     import ctypes
 
     # 先加载 fribidi：libraqm 依赖它
+    # Load fribidi first: libraqm depends on it.
     for name in ("fribidi-0.dll", "libraqm.dll"):
         path = os.path.join(_THIS_DIR, name)
         if not os.path.isfile(path):
@@ -51,11 +80,12 @@ def _preload() -> None:
             loaded.append(path)
         except OSError:
             # 位数不匹配或依赖缺失，交给 Pillow 报错
+            # Bitness mismatch or a missing dependency; let Pillow report the error.
             pass
 
 
 def raqm_available() -> bool:
-    """Pillow 是否能使用 libraqm（未安装 Pillow 时返回 False）。"""
+    """Pillow 是否能使用 libraqm（未安装 Pillow 时返回 False）。 / Whether Pillow can use libraqm (returns False when Pillow is not installed)."""
     try:
         from PIL import features
     except ImportError:

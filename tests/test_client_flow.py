@@ -9,6 +9,20 @@
 `/时刻表` 会**真的生成 PNG** 并进入上传流程（上传被替换成记录调用）。
 `/go` 依赖 `http://localhost:1025` 的地图数据源，本环境没有，
 所以走的是失败分支；`/go` 的成功出图由 test_render 用 `--no-update` 覆盖。
+
+Functional tests for client.py: run the bot for real against stub modules.
+
+qq-botpy and aiohttp are not installed here, so minimal stubs are built that
+implement only the interfaces client.py actually uses, making the whole message
+pipeline executable:
+
+    receive message → parse command → run a real subprocess → call the upload
+    interface (fake upload) → reply
+
+`/时刻表` **really generates a PNG** and enters the upload flow (the upload is
+replaced by a call recorder). `/go` depends on the map data source at
+`http://localhost:1025`, which is absent here, so it takes the failure branch;
+successful `/go` rendering is covered by test_render with `--no-update`.
 """
 
 import asyncio
@@ -25,11 +39,12 @@ import support
 support.ensure_examples_on_path()
 
 #: 记录所有 HTTP 请求，供断言使用
+#: Records every HTTP request for assertions.
 HTTP_REQUESTS = []
 
 
 def _install_stubs():
-    """在 import client 之前装好 botpy / aiohttp 替身。"""
+    """在 import client 之前装好 botpy / aiohttp 替身。 / Install the botpy / aiohttp stubs before client is imported."""
     import yaml
 
     # ---------- botpy ----------
@@ -96,6 +111,7 @@ def _install_stubs():
 
     class ClientSession:
         #: 按顺序消费的 (status, payload) 队列
+        #: Queue of (status, payload) pairs consumed in order.
         responses = []
 
         def __init__(self, timeout=None):
@@ -160,6 +176,10 @@ class ClientFlowTests(unittest.TestCase):
         # 必须先 import client：它在模块导入时就会读 config.yaml，
         # 而临时工作区里没有配置文件。改 EXAMPLES_DIR 只影响子进程的 cwd 与脚本路径，
         # 那是在调用时读取的，所以放在 import 之后。
+        # client must be imported first: it reads config.yaml at module import
+        # time, and the temporary workspace has no config file. Changing
+        # EXAMPLES_DIR only affects the subprocess cwd and script paths, which
+        # are read at call time, so it happens after the import.
         import client
         cls.client_module = client
         cls.bot = client.MyClient(intents=None)
@@ -171,6 +191,9 @@ class ClientFlowTests(unittest.TestCase):
         cls.cmds.EXAMPLES_DIR = cls.real_examples_dir
         # client.py 导入时配置过日志，文件处理器还占着 <tmp>/bot.log；
         # Windows 上不先释放，rmtree 会静默失败，每跑一次泄漏一个临时目录
+        # client.py configures logging on import, and its file handler still
+        # holds <tmp>/bot.log; on Windows rmtree fails silently unless the file
+        # is released first, leaking one temporary directory per run.
         import logging_setup
         logging_setup.setup_console()
         os.environ.pop("MTR_LOG_DIR", None)
@@ -180,6 +203,7 @@ class ClientFlowTests(unittest.TestCase):
         HTTP_REQUESTS.clear()
         self.session_cls.responses = []
         # 上传成功 + 发送成功
+        # Upload succeeds and sending succeeds.
         self.session_cls.responses = [
             (200, {"file_info": "FILEINFO"}),
             (200, {"id": "sent"}),
@@ -191,6 +215,7 @@ class ClientFlowTests(unittest.TestCase):
         return message._api.calls
 
     # ---------- 文本指令 ----------
+    # ---------- Text commands ----------
 
     def test_ping(self):
         replies = self.run_command("/ping")
@@ -203,11 +228,13 @@ class ClientFlowTests(unittest.TestCase):
 
     def test_unknown_command_is_silent(self):
         # /google 不应该被当成 /go，也不能乱回复
+        # /google must not be treated as /go, and no stray reply may be sent.
         self.assertEqual(self.run_command("/google 搜索一下"), [])
         self.assertEqual(self.run_command("随便聊聊"), [])
         self.assertEqual(self.run_command(""), [])
 
     # ---------- /go 参数校验 ----------
+    # ---------- /go argument validation ----------
 
     def test_route_without_semicolon(self):
         replies = self.run_command("/go 北海洋 恶地")
@@ -227,10 +254,15 @@ class ClientFlowTests(unittest.TestCase):
         self.assertIn("格式", replies[0]["content"])
 
     # ---------- /go：数据源不可用时改用本地缓存 ----------
+    # ---------- /go: fall back to the local cache when the data source is unavailable ----------
 
     def test_route_falls_back_to_cache_and_uploads(self):
         # 本机没有 1025 端口的地图服务，v4 应该抓取失败后自动回退到缓存，
         # 而不是直接失败（回退逻辑修好之前，这条会收到"寻路失败"）
+        # The local machine has no map service on port 1025, so v4 should
+        # automatically fall back to the cache after the fetch fails instead of
+        # failing outright (before the fallback was fixed, this test received
+        # "寻路失败").
         replies = self.run_command("/go 北海洋;恶地")
 
         self.assertEqual(replies, [], "有缓存时不应该回复错误文本")
@@ -275,6 +307,7 @@ class ClientFlowTests(unittest.TestCase):
             self.client_module.run_script = original
 
     # ---------- /时刻表 全链路 ----------
+    # ---------- /时刻表 end-to-end flow ----------
 
     def test_timetable_generates_image_and_uploads(self):
         replies = self.run_command("/时刻表 7号线")
@@ -293,9 +326,11 @@ class ClientFlowTests(unittest.TestCase):
         self.assertIn("用法", replies[0]["content"])
 
     # ---------- 上传失败分支 ----------
+    # ---------- Upload failure branches ----------
 
     def test_upload_failure_is_reported(self):
         self.session_cls.responses = [(200, {})]  # 没有 file_info
+        # No file_info.
         replies = self.run_command("/时刻表 7号线")
         self.assertEqual(len(replies), 1)
         self.assertIn("上传失败", replies[0]["content"])

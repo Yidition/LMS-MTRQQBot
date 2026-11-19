@@ -5,7 +5,7 @@ import hashlib
 import argparse
 import time
 
-import raqm_support  # noqa: F401  必须在 PIL 之前导入，负责注册 libraqm.dll
+import raqm_support  # noqa: F401  必须在 PIL 之前导入，负责注册 libraqm.dll / Must be imported before PIL; it registers libraqm.dll.
 from opencc import OpenCC
 from PIL import Image, ImageDraw, ImageFont
 
@@ -17,7 +17,7 @@ _log = logging_setup.get_logger("script.mtr_timetable")
 cc_s2t = OpenCC('s2t')
 
 def format_time(seconds):
-    """将秒数格式化为 HH:MM:SS，修复浮点数报错"""
+    """将秒数格式化为 HH:MM:SS，修复浮点数报错 / Formats seconds as HH:MM:SS and fixes float errors."""
     seconds = int(seconds)
     h = seconds // 3600
     m = (seconds % 3600) // 60
@@ -67,12 +67,17 @@ def generate_timetable(route_name, output_path, max_trains=15):
 
     durations = target_route.get('durations') or []
     # 停站时间挂在每个站点上，不是线路级字段（旧代码取错位置导致恒为 0）
+    # Dwell time is attached to each station, not to the route (the old code read it
+    # from the wrong place, so it was always 0).
     dwells = station_dwells(target_route, stations)
     # durations 单位是毫秒，station_offsets 内部会换算成秒
+    # durations is in milliseconds; station_offsets converts it to seconds internally.
     offsets = station_offsets(stations, durations, dwells)
 
     # 站名要查 data['stations']：线路内的 stations[i]['name'] 只是序号（"1"、"2"…），
     # 直接用它会让整张表头全变成"站 1"。
+    # Station names must come from data['stations']: stations[i]['name'] inside a route is
+    # only an index ("1", "2", ...); using it makes the whole header read "Station 1".
     station_names = []
     for st in stations:
         st_id = st.get('id') if isinstance(st, dict) else None
@@ -166,4 +171,5 @@ if __name__ == '__main__':
     
     ok = generate_timetable(args.route, args.output, args.max_trains)
     # 失败时返回非 0，方便脚本/CI 判断（原来无论成功失败都退出 0）
+    # Return non-zero on failure so scripts/CI can detect it (previously it always exited 0).
     raise SystemExit(0 if ok else 1)

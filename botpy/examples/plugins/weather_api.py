@@ -9,6 +9,20 @@
 
 注意：下面这个 API Key 是原作者的公开写到源码里的，建议改用环境变量
 ``JUHE_WEATHER_KEY`` 覆盖，并到聚合数据后台重置旧 key。
+
+Wrapper for the Juhe weather API.
+
+Historical bugs:
+1. the city name was concatenated into the URL without encoding, so Chinese city
+   names were garbled by requests or failed outright; the ``params`` argument now
+   lets requests handle the encoding;
+2. ``data['reason']`` / ``data['result']`` were hard-indexed, so any change in the
+   response structure raised KeyError;
+3. requests had no timeout, so a stuck API kept the caller hanging.
+
+Note: the API key below was published in the source by the original author. Prefer
+overriding it with the ``JUHE_WEATHER_KEY`` environment variable and reset the old
+key in the Juhe console.
 """
 
 import os
@@ -18,14 +32,16 @@ import requests
 API_URL = "https://apis.juhe.cn/simpleWeather/query"
 
 #: 聚合数据 API Key（可用环境变量覆盖）
+#: Juhe API key (can be overridden by an environment variable).
 API_KEY = os.environ.get("JUHE_WEATHER_KEY", "50a3bd415158e186903d6e6994157589")
 
 #: 请求超时（秒）
+#: Request timeout (seconds).
 TIMEOUT = 15
 
 
 def get_weather(city_name):
-    """查询城市天气，返回结果字典；失败时返回 ``{'error': '...'}``。"""
+    """查询城市天气，返回结果字典；失败时返回 ``{'error': '...'}``。 / Query the weather of a city and return the result dict; on failure return ``{'error': '...'}``."""
     city_name = (city_name or "").strip()
     if not city_name:
         return {"error": "城市名不能为空"}
@@ -59,7 +75,7 @@ def get_weather(city_name):
 
 
 def format_weather(city_name):
-    """把天气数据拼成一段可直接发到群里的文本。"""
+    """把天气数据拼成一段可直接发到群里的文本。 / Render the weather data as text that can be posted to a group directly."""
     data = get_weather(city_name)
     if not isinstance(data, dict):
         return "查询失败"
