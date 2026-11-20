@@ -2,6 +2,13 @@
 
 > 中文 · [English](README.en.md)
 
+[![Stars](https://img.shields.io/github/stars/Yidition/LMS-MTRQQBot?style=flat-square&logo=github)](https://github.com/Yidition/LMS-MTRQQBot/stargazers)
+[![Forks](https://img.shields.io/github/forks/Yidition/LMS-MTRQQBot?style=flat-square&logo=github)](https://github.com/Yidition/LMS-MTRQQBot/forks)
+[![Issues](https://img.shields.io/github/issues/Yidition/LMS-MTRQQBot?style=flat-square&logo=github)](https://github.com/Yidition/LMS-MTRQQBot/issues)
+[![License](https://img.shields.io/github/license/Yidition/LMS-MTRQQBot?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white)](#环境要求)
+[![Tests](https://img.shields.io/badge/tests-112%20passed-brightgreen?style=flat-square)](#测试)
+
 一个基于 QQ 官方机器人 API 的 Minecraft Transit Railway 寻路 / 出图机器人：
 在群里 @ 机器人发送指令，它会算出两站之间的最优路线、生成时刻表或列车运行图，并把图片发回群里。
 
@@ -49,6 +56,24 @@
 /go 北海洋;恶地 --no-highspeed
 /go 小齐中心;沙平恶 --no-逸扬环线 --no-lightrail
 ```
+
+---
+
+## 效果演示
+
+以下图片全部由机器人真实生成（数据来自项目的离线缓存，不是手工绘制）。
+
+**寻路结果** — `/go 小齐中心;沙平恶`
+
+![寻路结果](docs/images/route.png)
+
+**线路时刻表** — `/时刻表 7号线`
+
+![线路时刻表](docs/images/timetable.png)
+
+**列车运行图** — `/运行图 7号线`
+
+![列车运行图](docs/images/diagram.png)
 
 ---
 
@@ -189,6 +214,7 @@ MTRPathQQBot-main/
 ├─ THIRD-PARTY-NOTICES.en.md 同上，英文版
 ├─ 项目结构.md               目录职责、路径依赖、修复记录、已知问题（建议一并看）
 ├─ 项目结构.en.md            同上，英文版
+├─ docs/images/              效果演示用示例图
 ├─ requirements.txt
 ├─ tests/                    自动化测试
 └─ botpy/examples/           ★ 工作目录
@@ -272,6 +298,17 @@ python mtr_diagram.py "7号线" --output C:\tmp\dg.png --max-trains 10
 - 寻路优先用在线数据，地图服务不可用时自动回退本地缓存；两者都没有才会失败。
 
 ---
+
+## 贡献流程
+
+每次改动都会开一条 **Pull Request** 并立即合并，所以 `main` 始终是最新的，
+同时每次改动都留有可追溯的 PR 记录。
+
+1. 从 `main` 切出分支，例如 `changes/2026-11-20-bilingual`
+2. 在分支上提交并推送
+3. 开 PR → 立即 squash 合并进 `main`
+
+维护者自己的改动也走同样的流程，所以每个 PR 里都能看到完整差异和校验结果（`python -B tests\run_all.py`）。
 
 ## 来源与授权
 
